@@ -78,10 +78,3 @@ func isTerminalOutput(output io.Writer) bool {
 
 	return info.Mode()&os.ModeCharDevice != 0
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
