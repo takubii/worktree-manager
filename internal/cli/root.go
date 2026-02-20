@@ -6,13 +6,17 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/takubii/git-worktree-opener/internal/git"
+	"github.com/takubii/git-worktree-opener/internal/opener"
+	"github.com/takubii/git-worktree-opener/internal/selector"
 )
 
 // Dependencies holds external dependencies for command execution.
 type Dependencies struct {
-	Stdout io.Writer
-	Stderr io.Writer
-	Git    git.Client
+	Stdout   io.Writer
+	Stderr   io.Writer
+	Git      git.Client
+	Opener   opener.Opener
+	Selector selector.Selector
 }
 
 // NewRootCmd creates the root command for wto.
@@ -29,6 +33,7 @@ func NewRootCmd(deps Dependencies) *cobra.Command {
 	cmd.SetErr(deps.Stderr)
 
 	cmd.AddCommand(newListCmd(deps))
+	cmd.AddCommand(newOpenCmd(deps))
 
 	return cmd
 }
@@ -42,6 +47,12 @@ func withDefaults(deps Dependencies) Dependencies {
 	}
 	if deps.Git == nil {
 		deps.Git = git.NewClient()
+	}
+	if deps.Opener == nil {
+		deps.Opener = opener.NewDefault()
+	}
+	if deps.Selector == nil {
+		deps.Selector = selector.NewDefault(os.Stdin, deps.Stderr)
 	}
 	return deps
 }
