@@ -32,7 +32,7 @@ List worktrees in the current repository:
 go run ./cmd/wto list
 ```
 
-Select and open an existing worktree (uses `fzf` if installed, otherwise numeric selection):
+Select and open an existing worktree (uses `fzf` if installed, otherwise `promptui`, and finally numeric selection when interactive UI is unavailable):
 
 ```sh
 go run ./cmd/wto open
