@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   quality:
-    name: Quality (goimports + test)
+    name: Quality (lint + test)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -35,24 +35,11 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Install goimports
-        run: go install golang.org/x/tools/cmd/goimports@latest
-
-      - name: Check goimports
-        shell: bash
-        run: |
-          files="$(git ls-files '*.go')"
-          if [ -z "$files" ]; then
-            echo "No Go files found."
-            exit 0
-          fi
-
-          unformatted="$($(go env GOPATH)/bin/goimports -l $files)"
-          if [ -n "$unformatted" ]; then
-            echo "The following files need goimports:"
-            echo "$unformatted"
-            exit 1
-          fi
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --timeout=5m
 
       - name: Run tests
         run: go test ./...
