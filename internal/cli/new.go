@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/takubii/git-worktree-opener/internal/git"
 	"github.com/takubii/git-worktree-opener/internal/opener"
+	"github.com/takubii/git-worktree-opener/internal/selector"
 )
 
 const (
@@ -113,14 +114,33 @@ func resolveTargetBranch(cmd *cobra.Command, deps Dependencies, branchArg string
 			return "", "", fmt.Errorf("no branches available. Create or fetch branches, then run `wto new` again")
 		}
 
-		selectedIndex, err := deps.Selector.Select(cmd.Context(), "Select a branch for the new worktree:", candidates)
-		if err != nil {
-			return "", "", err
+		creator, supportsCreate := deps.Selector.(selector.SelectOrCreator)
+		if supportsCreate {
+			result, err := creator.SelectOrCreate(cmd.Context(), "Select or enter a branch for the new worktree:", candidates)
+			if err != nil {
+				return "", "", err
+			}
+
+			branchArg = normalizeBranch(result.Value)
+			if branchArg == "" {
+				return "", "", fmt.Errorf("branch name is empty. Enter a branch name and retry")
+			}
+
+			if result.IsNew {
+				if err := deps.Git.CheckBranchName(cmd.Context(), branchArg); err != nil {
+					return "", "", err
+				}
+			}
+		} else {
+			selectedIndex, err := deps.Selector.Select(cmd.Context(), "Select a branch for the new worktree:", candidates)
+			if err != nil {
+				return "", "", err
+			}
+			if selectedIndex < 0 || selectedIndex >= len(candidates) {
+				return "", "", fmt.Errorf("invalid branch selection index: %d", selectedIndex)
+			}
+			branchArg = candidates[selectedIndex]
 		}
-		if selectedIndex < 0 || selectedIndex >= len(candidates) {
-			return "", "", fmt.Errorf("invalid branch selection index: %d", selectedIndex)
-		}
-		branchArg = candidates[selectedIndex]
 	}
 
 	if _, ok := localSet[branchArg]; ok {

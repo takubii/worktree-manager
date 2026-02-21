@@ -24,6 +24,8 @@ type fakeGitClient struct {
 	remoteName        string
 	remoteBranches    []string
 	remoteBranchesErr error
+	checkBranchName   []string
+	checkBranchErr    error
 	worktreeAddCalls  []git.WorktreeAddParams
 	worktreeAddErr    error
 	callLog           []string
@@ -61,6 +63,12 @@ func (f *fakeGitClient) WorktreeAdd(_ context.Context, params git.WorktreeAddPar
 	f.worktreeAddCalls = append(f.worktreeAddCalls, params)
 	f.callLog = append(f.callLog, "WorktreeAdd")
 	return f.worktreeAddErr
+}
+
+func (f *fakeGitClient) CheckBranchName(_ context.Context, branch string) error {
+	f.checkBranchName = append(f.checkBranchName, branch)
+	f.callLog = append(f.callLog, "CheckBranchName")
+	return f.checkBranchErr
 }
 
 func TestListCommand_WritesGitOutput(t *testing.T) {

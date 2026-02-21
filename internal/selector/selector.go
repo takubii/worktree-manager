@@ -19,13 +19,26 @@ type Selector interface {
 	Select(ctx context.Context, prompt string, options []string) (int, error)
 }
 
+// SelectOrCreateResult is the outcome of selecting an existing option or entering a new value.
+type SelectOrCreateResult struct {
+	Value string
+	IsNew bool
+}
+
+// SelectOrCreator chooses one option or returns a newly entered value.
+type SelectOrCreator interface {
+	SelectOrCreate(ctx context.Context, prompt string, options []string) (SelectOrCreateResult, error)
+}
+
 type defaultSelector struct {
-	in            io.Reader
-	out           io.Writer
-	lookPath      lookPathFunc
-	execCommand   execCommandFunc
-	usePromptUI   func(prompt string, options []string) (int, error)
-	isInteractive func() bool
+	in                        io.Reader
+	out                       io.Writer
+	lookPath                  lookPathFunc
+	execCommand               execCommandFunc
+	usePromptUI               func(prompt string, options []string) (int, error)
+	usePromptUISelectOrCreate func(prompt string, options []string) (SelectOrCreateResult, error)
+	useFZFSelectOrCreate      func(ctx context.Context, prompt string, options []string) (SelectOrCreateResult, error)
+	isInteractive             func() bool
 }
 
 // NewDefault returns the default selector implementation.
@@ -37,6 +50,8 @@ func NewDefault(in io.Reader, out io.Writer) Selector {
 		execCommand: exec.CommandContext,
 	}
 	s.usePromptUI = s.selectWithPromptUI
+	s.usePromptUISelectOrCreate = s.selectOrCreateWithPromptUI
+	s.useFZFSelectOrCreate = s.selectOrCreateWithFZF
 	s.isInteractive = s.defaultIsInteractive
 	return s
 }
@@ -64,4 +79,51 @@ func (s *defaultSelector) Select(ctx context.Context, prompt string, options []s
 	}
 
 	return s.selectWithNumberedFallback(prompt, options)
+}
+
+func (s *defaultSelector) SelectOrCreate(ctx context.Context, prompt string, options []string) (SelectOrCreateResult, error) {
+	if len(options) == 0 {
+		return SelectOrCreateResult{}, fmt.Errorf("no options are available to select or create")
+	}
+
+	if _, err := s.lookPath("fzf"); err == nil {
+		if s.useFZFSelectOrCreate == nil {
+			return SelectOrCreateResult{}, fmt.Errorf("fzf selector is not configured")
+		}
+		return s.useFZFSelectOrCreate(ctx, prompt, options)
+	}
+
+	if s.isInteractive != nil && s.isInteractive() {
+		if s.usePromptUISelectOrCreate == nil {
+			return SelectOrCreateResult{}, fmt.Errorf("promptui selector is not configured")
+		}
+
+		result, err := s.usePromptUISelectOrCreate(prompt, options)
+		if err == nil {
+			return result, nil
+		}
+		if errors.Is(err, errSelectionCanceled) {
+			return SelectOrCreateResult{}, err
+		}
+	}
+
+	if len(options) == 1 {
+		return SelectOrCreateResult{
+			Value: options[0],
+			IsNew: false,
+		}, nil
+	}
+
+	index, err := s.selectWithNumberedFallback(prompt, options)
+	if err != nil {
+		return SelectOrCreateResult{}, err
+	}
+	if index < 0 || index >= len(options) {
+		return SelectOrCreateResult{}, fmt.Errorf("selected option index is out of range: %d", index)
+	}
+
+	return SelectOrCreateResult{
+		Value: options[index],
+		IsNew: false,
+	}, nil
 }

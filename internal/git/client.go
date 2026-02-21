@@ -9,6 +9,7 @@ type Client interface {
 	FetchPrune(ctx context.Context, remote string) error
 	LocalBranches(ctx context.Context) ([]string, error)
 	RemoteBranches(ctx context.Context, remote string) ([]string, error)
+	CheckBranchName(ctx context.Context, branch string) error
 	WorktreeAdd(ctx context.Context, params WorktreeAddParams) error
 }
 

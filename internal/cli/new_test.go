@@ -2,12 +2,15 @@ package cli
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	openerpkg "github.com/takubii/git-worktree-opener/internal/opener"
+	selectorpkg "github.com/takubii/git-worktree-opener/internal/selector"
 )
 
 func TestNewCommand_CreatesWorktreeFromLocalBranch(t *testing.T) {
@@ -211,6 +214,144 @@ func TestNewCommand_ReturnsErrorWhenNoBranchesAreAvailable(t *testing.T) {
 	}
 	if openExec.call != 0 {
 		t.Fatalf("opener should not be called, got %d", openExec.call)
+	}
+}
+
+type fakeSelectOrCreateSelector struct {
+	result selectorpkg.SelectOrCreateResult
+	err    error
+	calls  int
+}
+
+func (s *fakeSelectOrCreateSelector) Select(_ context.Context, _ string, _ []string) (int, error) {
+	return -1, errors.New("Select should not be called")
+}
+
+func (s *fakeSelectOrCreateSelector) SelectOrCreate(_ context.Context, _ string, _ []string) (selectorpkg.SelectOrCreateResult, error) {
+	s.calls++
+	return s.result, s.err
+}
+
+func TestNewCommand_ValidatesNewBranchFromInteractiveInput(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := createTestRepoRoot(t)
+	gitClient := &fakeGitClient{
+		repoRoot:       repoRoot,
+		localBranches:  []string{"main"},
+		remoteBranches: []string{"origin/main"},
+	}
+	selectorWithCreate := &fakeSelectOrCreateSelector{
+		result: selectorpkg.SelectOrCreateResult{
+			Value: "feature/typed",
+			IsNew: true,
+		},
+	}
+	openExec := &fakeOpener{}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: selectorWithCreate,
+		Opener:   openExec,
+	})
+	cmd.SetArgs([]string{"new"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if selectorWithCreate.calls != 1 {
+		t.Fatalf("expected SelectOrCreate to be called once, got %d", selectorWithCreate.calls)
+	}
+	if len(gitClient.checkBranchName) != 1 || gitClient.checkBranchName[0] != "feature/typed" {
+		t.Fatalf("unexpected branch validation calls: %v", gitClient.checkBranchName)
+	}
+	if len(gitClient.worktreeAddCalls) != 1 {
+		t.Fatalf("expected one WorktreeAdd call, got %d", len(gitClient.worktreeAddCalls))
+	}
+	if got := gitClient.worktreeAddCalls[0].StartPoint; got != "main" {
+		t.Fatalf("unexpected start point: %q", got)
+	}
+}
+
+func TestNewCommand_ReturnsErrorWhenInteractiveBranchValidationFails(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := createTestRepoRoot(t)
+	gitClient := &fakeGitClient{
+		repoRoot:       repoRoot,
+		localBranches:  []string{"main"},
+		remoteBranches: []string{"origin/main"},
+		checkBranchErr: errors.New("invalid branch name"),
+		worktreeAddErr: nil,
+	}
+	selectorWithCreate := &fakeSelectOrCreateSelector{
+		result: selectorpkg.SelectOrCreateResult{
+			Value: "bad branch",
+			IsNew: true,
+		},
+	}
+	openExec := &fakeOpener{}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: selectorWithCreate,
+		Opener:   openExec,
+	})
+	cmd.SetArgs([]string{"new"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected Execute() to return error")
+	}
+	if !strings.Contains(err.Error(), "invalid branch name") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(gitClient.worktreeAddCalls) != 0 {
+		t.Fatalf("WorktreeAdd should not be called, got %d", len(gitClient.worktreeAddCalls))
+	}
+	if openExec.call != 0 {
+		t.Fatalf("opener should not be called, got %d", openExec.call)
+	}
+}
+
+func TestNewCommand_DoesNotValidateExistingBranchSelection(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := createTestRepoRoot(t)
+	gitClient := &fakeGitClient{
+		repoRoot:       repoRoot,
+		localBranches:  []string{"main", "feature/existing"},
+		remoteBranches: []string{"origin/main"},
+		checkBranchErr: errors.New("should not be called"),
+	}
+	selectorWithCreate := &fakeSelectOrCreateSelector{
+		result: selectorpkg.SelectOrCreateResult{
+			Value: "feature/existing",
+			IsNew: false,
+		},
+	}
+	openExec := &fakeOpener{}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: selectorWithCreate,
+		Opener:   openExec,
+	})
+	cmd.SetArgs([]string{"new"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if len(gitClient.checkBranchName) != 0 {
+		t.Fatalf("CheckBranchName should not be called for existing selection, got: %v", gitClient.checkBranchName)
 	}
 }
 

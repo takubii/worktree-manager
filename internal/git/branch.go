@@ -92,6 +92,25 @@ func (c *execClient) RemoteBranches(ctx context.Context, remote string) ([]strin
 	return branches, nil
 }
 
+func (c *execClient) CheckBranchName(ctx context.Context, branch string) error {
+	branch = normalizeBranchName(branch)
+	if branch == "" {
+		return fmt.Errorf("branch name is empty. Enter a branch name and retry")
+	}
+
+	_, stderr, err := c.runGit(ctx, "check-ref-format", "--branch", branch)
+	if err != nil {
+		return buildGitCommandError(
+			err,
+			stderr,
+			fmt.Sprintf("check-ref-format --branch %s", branch),
+			"Use a valid branch name (for example, `feature/my-task`) and retry",
+		)
+	}
+
+	return nil
+}
+
 func parseBranchLines(raw string) []string {
 	lines := strings.Split(raw, "\n")
 	branches := make([]string, 0, len(lines))

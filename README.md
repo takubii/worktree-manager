@@ -43,6 +43,12 @@ go run ./cmd/wto new feature/my-task --base main --open vscode
 
 By default, `wto new` runs `git fetch origin --prune`, uses `main` as the base when creating a new branch, creates the worktree under `<repo-parent>/worktrees/<branch>`, and opens it with the `system` opener in a new window.
 
+When running `wto new` without a branch argument:
+
+- with `fzf`, you can type a branch name and press Enter to create it if no existing branch is selected
+- with `promptui`, choose `Create a new branch` and enter the branch name
+- the entered name is validated with `git check-ref-format --branch`
+
 Select and open an existing worktree (uses `fzf` if installed, otherwise `promptui`, and finally numeric selection when interactive UI is unavailable):
 
 ```sh

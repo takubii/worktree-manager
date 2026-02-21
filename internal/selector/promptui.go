@@ -31,6 +31,34 @@ func (s *defaultSelector) selectWithPromptUI(prompt string, options []string) (i
 	return index, nil
 }
 
+func (s *defaultSelector) selectOrCreateWithPromptUI(prompt string, options []string) (SelectOrCreateResult, error) {
+	selector := promptui.SelectWithAdd{
+		Label:    prompt,
+		Items:    options,
+		AddLabel: "Create a new branch",
+	}
+
+	index, value, err := selector.Run()
+	if err != nil {
+		switch {
+		case errors.Is(err, promptui.ErrInterrupt), errors.Is(err, promptui.ErrEOF):
+			return SelectOrCreateResult{}, errSelectionCanceled
+		default:
+			return SelectOrCreateResult{}, fmt.Errorf("%w: %v", errPromptUIUnavailable, err)
+		}
+	}
+
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return SelectOrCreateResult{}, fmt.Errorf("branch name is empty. Enter a branch name and retry")
+	}
+
+	return SelectOrCreateResult{
+		Value: value,
+		IsNew: index == promptui.SelectedAdd,
+	}, nil
+}
+
 func newOptionSearcher(options []string) func(string, int) bool {
 	return func(input string, index int) bool {
 		if index < 0 || index >= len(options) {

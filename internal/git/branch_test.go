@@ -110,6 +110,45 @@ func TestExecClientRemoteBranches_FiltersByRemote(t *testing.T) {
 	}
 }
 
+func TestExecClientCheckBranchName_RunsExpectedCommand(t *testing.T) {
+	t.Parallel()
+
+	var gotArgs []string
+	client := newExecClient(func(ctx context.Context, _ string, args ...string) *exec.Cmd {
+		gotArgs = append([]string(nil), args...)
+
+		cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=TestHelperProcess", "--")
+		cmd.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1")
+		return cmd
+	})
+
+	if err := client.CheckBranchName(context.Background(), "refs/heads/feature/x"); err != nil {
+		t.Fatalf("CheckBranchName() returned error: %v", err)
+	}
+
+	expectedArgs := []string{"check-ref-format", "--branch", "feature/x"}
+	if !reflect.DeepEqual(gotArgs, expectedArgs) {
+		t.Fatalf("unexpected args: want=%v got=%v", expectedArgs, gotArgs)
+	}
+}
+
+func TestExecClientCheckBranchName_ValidatesEmptyInput(t *testing.T) {
+	t.Parallel()
+
+	client := newExecClient(func(context.Context, string, ...string) *exec.Cmd {
+		t.Fatal("exec command should not be called on invalid input")
+		return nil
+	})
+
+	err := client.CheckBranchName(context.Background(), "   ")
+	if err == nil {
+		t.Fatal("expected CheckBranchName() to return error")
+	}
+	if !strings.Contains(err.Error(), "branch name is empty") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestExecClientWorktreeAdd_RunsExpectedArgsWithoutStartPoint(t *testing.T) {
 	t.Parallel()
 
