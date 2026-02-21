@@ -6,17 +6,61 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/takubii/git-worktree-opener/internal/git"
 )
 
 type fakeGitClient struct {
 	output string
 	err    error
 	calls  int
+
+	fetchRemote       string
+	fetchErr          error
+	repoRoot          string
+	repoRootErr       error
+	localBranches     []string
+	localBranchesErr  error
+	remoteName        string
+	remoteBranches    []string
+	remoteBranchesErr error
+	worktreeAddCalls  []git.WorktreeAddParams
+	worktreeAddErr    error
+	callLog           []string
 }
 
 func (f *fakeGitClient) WorktreeListPorcelain(_ context.Context) (string, error) {
 	f.calls++
+	f.callLog = append(f.callLog, "WorktreeListPorcelain")
 	return f.output, f.err
+}
+
+func (f *fakeGitClient) RepoRoot(_ context.Context) (string, error) {
+	f.callLog = append(f.callLog, "RepoRoot")
+	return f.repoRoot, f.repoRootErr
+}
+
+func (f *fakeGitClient) FetchPrune(_ context.Context, remote string) error {
+	f.fetchRemote = remote
+	f.callLog = append(f.callLog, "FetchPrune")
+	return f.fetchErr
+}
+
+func (f *fakeGitClient) LocalBranches(_ context.Context) ([]string, error) {
+	f.callLog = append(f.callLog, "LocalBranches")
+	return append([]string(nil), f.localBranches...), f.localBranchesErr
+}
+
+func (f *fakeGitClient) RemoteBranches(_ context.Context, remote string) ([]string, error) {
+	f.remoteName = remote
+	f.callLog = append(f.callLog, "RemoteBranches")
+	return append([]string(nil), f.remoteBranches...), f.remoteBranchesErr
+}
+
+func (f *fakeGitClient) WorktreeAdd(_ context.Context, params git.WorktreeAddParams) error {
+	f.worktreeAddCalls = append(f.worktreeAddCalls, params)
+	f.callLog = append(f.callLog, "WorktreeAdd")
+	return f.worktreeAddErr
 }
 
 func TestListCommand_WritesGitOutput(t *testing.T) {

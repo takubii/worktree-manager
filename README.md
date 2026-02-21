@@ -8,6 +8,7 @@ Implemented commands:
 
 - `wto --help`
 - `wto list`
+- `wto new`
 - `wto open`
 
 `wto list` executes:
@@ -31,6 +32,16 @@ List worktrees in the current repository:
 ```sh
 go run ./cmd/wto list
 ```
+
+Create a new worktree:
+
+```sh
+go run ./cmd/wto new
+go run ./cmd/wto new feature/my-task
+go run ./cmd/wto new feature/my-task --base main --open vscode
+```
+
+By default, `wto new` runs `git fetch origin --prune`, uses `main` as the base when creating a new branch, creates the worktree under `<repo-parent>/worktrees/<branch>`, and opens it with the `system` opener in a new window.
 
 Select and open an existing worktree (uses `fzf` if installed, otherwise `promptui`, and finally numeric selection when interactive UI is unavailable):
 

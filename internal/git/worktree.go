@@ -3,7 +3,6 @@ package git
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -23,7 +22,53 @@ func newExecClient(execCommand execCommandFunc) *execClient {
 }
 
 func (c *execClient) WorktreeListPorcelain(ctx context.Context) (string, error) {
-	cmd := c.execCommand(ctx, "git", "worktree", "list", "--porcelain")
+	stdout, stderr, err := c.runGit(ctx, "worktree", "list", "--porcelain")
+	if err != nil {
+		return "", buildGitCommandError(
+			err,
+			stderr,
+			"worktree list --porcelain",
+			"Run this command inside a Git repository, then retry",
+		)
+	}
+
+	return stdout, nil
+}
+
+func (c *execClient) WorktreeAdd(ctx context.Context, params WorktreeAddParams) error {
+	path := strings.TrimSpace(params.Path)
+	if path == "" {
+		return fmt.Errorf("worktree path is empty. Provide a valid destination path and retry")
+	}
+
+	branch := normalizeBranchName(params.Branch)
+	if branch == "" {
+		return fmt.Errorf("branch name is empty. Specify a branch name and retry")
+	}
+
+	args := []string{"worktree", "add"}
+	startPoint := strings.TrimSpace(params.StartPoint)
+	if startPoint != "" {
+		args = append(args, "-b", branch, path, startPoint)
+	} else {
+		args = append(args, path, branch)
+	}
+
+	_, stderr, err := c.runGit(ctx, args...)
+	if err != nil {
+		return buildGitCommandError(
+			err,
+			stderr,
+			strings.Join(args, " "),
+			"Check branch/path conflicts (for example, an existing worktree for that branch) and retry",
+		)
+	}
+
+	return nil
+}
+
+func (c *execClient) runGit(ctx context.Context, args ...string) (string, string, error) {
+	cmd := c.execCommand(ctx, "git", args...)
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -31,22 +76,8 @@ func (c *execClient) WorktreeListPorcelain(ctx context.Context) (string, error) 
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return "", buildWorktreeListError(err, stderr.String())
+		return stdout.String(), stderr.String(), err
 	}
 
-	return stdout.String(), nil
-}
-
-func buildWorktreeListError(runErr error, stderrOutput string) error {
-	var execErr *exec.Error
-	if errors.As(runErr, &execErr) && errors.Is(execErr.Err, exec.ErrNotFound) {
-		return fmt.Errorf("`git` command was not found. Install Git and ensure it is available in PATH, then retry")
-	}
-
-	stderrOutput = strings.TrimSpace(stderrOutput)
-	if stderrOutput == "" {
-		return fmt.Errorf("failed to run `git worktree list --porcelain`: %w. Run this command inside a Git repository", runErr)
-	}
-
-	return fmt.Errorf("failed to run `git worktree list --porcelain`: %s. Run this command inside a Git repository", stderrOutput)
+	return stdout.String(), stderr.String(), nil
 }
