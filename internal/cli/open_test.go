@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/takubii/git-worktree-opener/internal/config"
 	openerpkg "github.com/takubii/git-worktree-opener/internal/opener"
 )
 
@@ -195,5 +196,98 @@ func TestOpenCommand_ReturnsErrorForInvalidWindowMode(t *testing.T) {
 	}
 	if openExec.call != 0 {
 		t.Fatalf("opener should not be called on invalid window mode, got %d", openExec.call)
+	}
+}
+
+func TestOpenCommand_UsesConfigDefaultsWhenFlagsAreNotProvided(t *testing.T) {
+	t.Parallel()
+
+	gitClient := &fakeGitClient{
+		output: "worktree C:/repo\nHEAD abc\nbranch refs/heads/main\n\n",
+	}
+	selector := &fakeSelector{index: 0}
+	openExec := &fakeOpener{}
+	cfgProvider := &fakeConfigProvider{
+		cfg: config.Config{
+			Remote:              config.DefaultRemote,
+			BaseBranch:          config.DefaultBaseBranch,
+			WorktreeDirTemplate: config.DefaultWorktreeDirTemplate,
+			Open: config.Open{
+				Default: "vscode",
+				Window:  "reuse",
+			},
+			RM: config.RM{
+				DeleteBranch: config.DeleteBranchSafe,
+			},
+		},
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: selector,
+		Opener:   openExec,
+		Config:   cfgProvider,
+	})
+	cmd.SetArgs([]string{"open"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if openExec.kind != "vscode" {
+		t.Fatalf("unexpected opener kind: %q", openExec.kind)
+	}
+	if openExec.window != openerpkg.WindowReuse {
+		t.Fatalf("unexpected window mode: %q", openExec.window)
+	}
+	if cfgProvider.loadCalls != 1 {
+		t.Fatalf("expected one config load, got %d", cfgProvider.loadCalls)
+	}
+}
+
+func TestOpenCommand_FlagsOverrideConfigDefaults(t *testing.T) {
+	t.Parallel()
+
+	gitClient := &fakeGitClient{
+		output: "worktree C:/repo\nHEAD abc\nbranch refs/heads/main\n\n",
+	}
+	selector := &fakeSelector{index: 0}
+	openExec := &fakeOpener{}
+	cfgProvider := &fakeConfigProvider{
+		cfg: config.Config{
+			Remote:              config.DefaultRemote,
+			BaseBranch:          config.DefaultBaseBranch,
+			WorktreeDirTemplate: config.DefaultWorktreeDirTemplate,
+			Open: config.Open{
+				Default: "cursor",
+				Window:  "reuse",
+			},
+			RM: config.RM{
+				DeleteBranch: config.DeleteBranchSafe,
+			},
+		},
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: selector,
+		Opener:   openExec,
+		Config:   cfgProvider,
+	})
+	cmd.SetArgs([]string{"open", "--open", "system", "--window", "new"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if openExec.kind != "system" {
+		t.Fatalf("unexpected opener kind: %q", openExec.kind)
+	}
+	if openExec.window != openerpkg.WindowNew {
+		t.Fatalf("unexpected window mode: %q", openExec.window)
 	}
 }

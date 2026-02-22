@@ -26,6 +26,11 @@ func newRmCmd(deps Dependencies) *cobra.Command {
 		Short: "Remove a worktree and optionally delete its local branch",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg := deps.Config.Load(cmd.Context())
+			if !cmd.Flags().Changed("delete-branch") {
+				deleteBranchRaw = cfg.RM.DeleteBranch
+			}
+
 			deleteMode, err := parseDeleteBranchMode(deleteBranchRaw)
 			if err != nil {
 				return err

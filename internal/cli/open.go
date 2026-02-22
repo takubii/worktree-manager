@@ -18,6 +18,15 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 		Short: "Select and open an existing worktree",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			cfg := deps.Config.Load(cmd.Context())
+
+			if !cmd.Flags().Changed("open") {
+				openerName = cfg.Open.Default
+			}
+			if !cmd.Flags().Changed("window") {
+				windowModeRaw = cfg.Open.Window
+			}
+
 			windowMode, err := opener.ParseWindowMode(windowModeRaw)
 			if err != nil {
 				return err

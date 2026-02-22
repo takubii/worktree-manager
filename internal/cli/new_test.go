@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/takubii/git-worktree-opener/internal/config"
 	openerpkg "github.com/takubii/git-worktree-opener/internal/opener"
 	selectorpkg "github.com/takubii/git-worktree-opener/internal/selector"
 )
@@ -352,6 +353,123 @@ func TestNewCommand_DoesNotValidateExistingBranchSelection(t *testing.T) {
 
 	if len(gitClient.checkBranchName) != 0 {
 		t.Fatalf("CheckBranchName should not be called for existing selection, got: %v", gitClient.checkBranchName)
+	}
+}
+
+func TestNewCommand_UsesConfigDefaultsWhenFlagsAreNotProvided(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := createTestRepoRoot(t)
+	expectedPath := filepath.Clean(filepath.Join(repoRoot, "..", "custom-worktrees", "feature", "new-one"))
+
+	gitClient := &fakeGitClient{
+		repoRoot:       repoRoot,
+		localBranches:  []string{"develop"},
+		remoteBranches: []string{"upstream/develop"},
+	}
+	openExec := &fakeOpener{}
+	cfgProvider := &fakeConfigProvider{
+		cfg: config.Config{
+			Remote:              "upstream",
+			BaseBranch:          "develop",
+			WorktreeDirTemplate: "{repoRoot}/../custom-worktrees/{branch}",
+			Open: config.Open{
+				Default: "cursor",
+				Window:  "reuse",
+			},
+			RM: config.RM{
+				DeleteBranch: config.DeleteBranchSafe,
+			},
+		},
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   openExec,
+		Config:   cfgProvider,
+	})
+	cmd.SetArgs([]string{"new", "feature/new-one"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if gitClient.fetchRemote != "upstream" {
+		t.Fatalf("unexpected fetch remote: %q", gitClient.fetchRemote)
+	}
+	if gitClient.remoteName != "upstream" {
+		t.Fatalf("unexpected remote query name: %q", gitClient.remoteName)
+	}
+	if len(gitClient.worktreeAddCalls) != 1 {
+		t.Fatalf("expected one WorktreeAdd call, got %d", len(gitClient.worktreeAddCalls))
+	}
+	if got := gitClient.worktreeAddCalls[0].StartPoint; got != "develop" {
+		t.Fatalf("unexpected start point: %q", got)
+	}
+	if got := filepath.Clean(gitClient.worktreeAddCalls[0].Path); got != expectedPath {
+		t.Fatalf("unexpected worktree path: want=%q got=%q", expectedPath, got)
+	}
+	if openExec.kind != "cursor" {
+		t.Fatalf("unexpected opener kind: %q", openExec.kind)
+	}
+	if openExec.window != openerpkg.WindowReuse {
+		t.Fatalf("unexpected window mode: %q", openExec.window)
+	}
+}
+
+func TestNewCommand_FlagsOverrideConfigDefaults(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := createTestRepoRoot(t)
+	gitClient := &fakeGitClient{
+		repoRoot:       repoRoot,
+		localBranches:  []string{"main", "develop"},
+		remoteBranches: []string{"upstream/main", "upstream/develop"},
+	}
+	openExec := &fakeOpener{}
+	cfgProvider := &fakeConfigProvider{
+		cfg: config.Config{
+			Remote:              "upstream",
+			BaseBranch:          "develop",
+			WorktreeDirTemplate: "{repoParent}/worktrees/{branch}",
+			Open: config.Open{
+				Default: "cursor",
+				Window:  "reuse",
+			},
+			RM: config.RM{
+				DeleteBranch: config.DeleteBranchSafe,
+			},
+		},
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   openExec,
+		Config:   cfgProvider,
+	})
+	cmd.SetArgs([]string{"new", "feature/new-two", "--base", "main", "--open", "vscode"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if len(gitClient.worktreeAddCalls) != 1 {
+		t.Fatalf("expected one WorktreeAdd call, got %d", len(gitClient.worktreeAddCalls))
+	}
+	if got := gitClient.worktreeAddCalls[0].StartPoint; got != "main" {
+		t.Fatalf("unexpected start point: %q", got)
+	}
+	if openExec.kind != "vscode" {
+		t.Fatalf("unexpected opener kind: %q", openExec.kind)
+	}
+	if openExec.window != openerpkg.WindowReuse {
+		t.Fatalf("unexpected window mode: %q", openExec.window)
 	}
 }
 

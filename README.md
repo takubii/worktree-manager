@@ -11,6 +11,8 @@ Implemented commands:
 - `wto new`
 - `wto open`
 - `wto rm`
+- `wto config init`
+- `wto config show`
 
 `wto list` executes:
 
@@ -91,6 +93,57 @@ By default, `wto rm` removes the selected worktree and then safely deletes the l
 - `--delete-branch safe` uses `git branch -d`
 - `--delete-branch force` uses `git branch -D`
 - `--force` forces `git worktree remove` and, when `--delete-branch` is not explicitly set, also switches branch deletion to force
+
+Initialize global config:
+
+```sh
+go run ./cmd/wto config init
+go run ./cmd/wto config init --force
+```
+
+Show effective config (merged defaults + global + repo override):
+
+```sh
+go run ./cmd/wto config show
+```
+
+Config is optional. If no config files exist, `wto` keeps using built-in defaults (0-config behavior).
+
+Config precedence:
+
+```text
+flag > repo (.wtoconfig.json) > global (config.json) > built-in defaults
+```
+
+Config file locations:
+
+- Global: `<os.UserConfigDir()>/git-worktree-opener/config.json`
+- Repo override: `<repo-root>/.wtoconfig.json`
+
+Supported config keys:
+
+```json
+{
+  "remote": "origin",
+  "baseBranch": "main",
+  "worktreeDirTemplate": "{repoParent}/worktrees/{branch}",
+  "open": {
+    "default": "system",
+    "window": "new"
+  },
+  "rm": {
+    "deleteBranch": "safe"
+  }
+}
+```
+
+`worktreeDirTemplate` placeholders:
+
+- `{repoParent}`
+- `{repoRoot}`
+- `{branch}`
+
+If global/repo config is invalid (unknown keys or invalid values), `wto` prints a warning to `stderr` and continues with lower-priority values.
 
 ## Error example
 

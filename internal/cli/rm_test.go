@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/takubii/git-worktree-opener/internal/config"
 )
 
 func TestRmCommand_RemovesSelectedWorktreeAndDeletesBranchByDefault(t *testing.T) {
@@ -241,5 +243,88 @@ func TestRmCommand_ReturnsErrorForInvalidDeleteBranchPolicy(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "invalid --delete-branch value") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRmCommand_UsesConfigDeleteBranchWhenFlagIsNotProvided(t *testing.T) {
+	t.Parallel()
+
+	gitClient := &fakeGitClient{
+		output: "worktree C:/worktrees/feature-x\nHEAD def\nbranch refs/heads/feature/x\n\n",
+	}
+	cfgProvider := &fakeConfigProvider{
+		cfg: config.Config{
+			Remote:              config.DefaultRemote,
+			BaseBranch:          config.DefaultBaseBranch,
+			WorktreeDirTemplate: config.DefaultWorktreeDirTemplate,
+			Open: config.Open{
+				Default: "system",
+				Window:  "new",
+			},
+			RM: config.RM{
+				DeleteBranch: config.DeleteBranchNone,
+			},
+		},
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+		Config:   cfgProvider,
+	})
+	cmd.SetArgs([]string{"rm"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if len(gitClient.deleteBranchCalls) != 0 {
+		t.Fatalf("DeleteLocalBranch should not be called, got %+v", gitClient.deleteBranchCalls)
+	}
+}
+
+func TestRmCommand_FlagDeleteBranchOverridesConfig(t *testing.T) {
+	t.Parallel()
+
+	gitClient := &fakeGitClient{
+		output: "worktree C:/worktrees/feature-x\nHEAD def\nbranch refs/heads/feature/x\n\n",
+	}
+	cfgProvider := &fakeConfigProvider{
+		cfg: config.Config{
+			Remote:              config.DefaultRemote,
+			BaseBranch:          config.DefaultBaseBranch,
+			WorktreeDirTemplate: config.DefaultWorktreeDirTemplate,
+			Open: config.Open{
+				Default: "system",
+				Window:  "new",
+			},
+			RM: config.RM{
+				DeleteBranch: config.DeleteBranchNone,
+			},
+		},
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+		Config:   cfgProvider,
+	})
+	cmd.SetArgs([]string{"rm", "--delete-branch", "safe"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if len(gitClient.deleteBranchCalls) != 1 {
+		t.Fatalf("expected one DeleteLocalBranch call, got %d", len(gitClient.deleteBranchCalls))
+	}
+	if gitClient.deleteBranchCalls[0].force {
+		t.Fatalf("expected safe delete, got force=true")
 	}
 }

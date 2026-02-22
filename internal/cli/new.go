@@ -8,14 +8,15 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/takubii/git-worktree-opener/internal/config"
 	"github.com/takubii/git-worktree-opener/internal/git"
 	"github.com/takubii/git-worktree-opener/internal/opener"
 	"github.com/takubii/git-worktree-opener/internal/selector"
 )
 
 const (
-	defaultRemoteName = "origin"
-	defaultBaseBranch = "main"
+	defaultRemoteName = config.DefaultRemote
+	defaultBaseBranch = config.DefaultBaseBranch
 )
 
 func newNewCmd(deps Dependencies) *cobra.Command {
@@ -27,17 +28,38 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 		Short: "Create and open a new worktree",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg := deps.Config.Load(cmd.Context())
+
+			remoteName := cfg.Remote
+			if strings.TrimSpace(remoteName) == "" {
+				return fmt.Errorf("remote name is empty. Set a valid `remote` in config and retry")
+			}
+
+			resolvedBaseBranch := strings.TrimSpace(baseBranch)
+			if !cmd.Flags().Changed("base") {
+				resolvedBaseBranch = cfg.BaseBranch
+			}
+			resolvedBaseBranch = strings.TrimSpace(resolvedBaseBranch)
+			if resolvedBaseBranch == "" {
+				return fmt.Errorf("base branch is empty. Set --base or `baseBranch` in config to a valid branch and retry")
+			}
+
+			resolvedOpener := strings.TrimSpace(openerName)
+			if !cmd.Flags().Changed("open") {
+				resolvedOpener = cfg.Open.Default
+			}
+
+			windowMode, err := opener.ParseWindowMode(cfg.Open.Window)
+			if err != nil {
+				return fmt.Errorf("invalid config open.window value: %w", err)
+			}
+
 			targetBranch := ""
 			if len(args) == 1 {
 				targetBranch = args[0]
 			}
 
-			baseBranch = strings.TrimSpace(baseBranch)
-			if baseBranch == "" {
-				return fmt.Errorf("base branch is empty. Set --base to a valid branch and retry")
-			}
-
-			if err := deps.Git.FetchPrune(cmd.Context(), defaultRemoteName); err != nil {
+			if err := deps.Git.FetchPrune(cmd.Context(), remoteName); err != nil {
 				return err
 			}
 
@@ -50,7 +72,7 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			remoteBranches, err := deps.Git.RemoteBranches(cmd.Context(), defaultRemoteName)
+			remoteBranches, err := deps.Git.RemoteBranches(cmd.Context(), remoteName)
 			if err != nil {
 				return err
 			}
@@ -59,7 +81,8 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 				cmd,
 				deps,
 				targetBranch,
-				baseBranch,
+				resolvedBaseBranch,
+				remoteName,
 				localBranches,
 				remoteBranches,
 			)
@@ -67,7 +90,7 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 				return err
 			}
 
-			worktreePath, err := defaultWorktreePath(repoRoot, resolvedBranch)
+			worktreePath, err := config.RenderWorktreeDir(cfg.WorktreeDirTemplate, repoRoot, resolvedBranch)
 			if err != nil {
 				return err
 			}
@@ -88,7 +111,7 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 				return err
 			}
 
-			if err := deps.Opener.Open(cmd.Context(), openerName, worktreePath, opener.WindowNew); err != nil {
+			if err := deps.Opener.Open(cmd.Context(), resolvedOpener, worktreePath, windowMode); err != nil {
 				return err
 			}
 
@@ -102,14 +125,22 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 	return cmd
 }
 
-func resolveTargetBranch(cmd *cobra.Command, deps Dependencies, branchArg string, baseBranch string, localBranches []string, remoteBranches []string) (string, string, error) {
-	branchArg = normalizeBranch(branchArg)
+func resolveTargetBranch(
+	cmd *cobra.Command,
+	deps Dependencies,
+	branchArg string,
+	baseBranch string,
+	remoteName string,
+	localBranches []string,
+	remoteBranches []string,
+) (string, string, error) {
+	branchArg = normalizeBranchForRemote(branchArg, remoteName)
 
-	localSet := asBranchSet(localBranches)
-	remoteSet := asRemoteBranchSet(remoteBranches, defaultRemoteName)
+	localSet := asBranchSet(localBranches, remoteName)
+	remoteSet := asRemoteBranchSet(remoteBranches, remoteName)
 
 	if branchArg == "" {
-		candidates := branchCandidates(localBranches, remoteBranches, defaultRemoteName)
+		candidates := branchCandidates(localBranches, remoteBranches, remoteName)
 		if len(candidates) == 0 {
 			return "", "", fmt.Errorf("no branches available. Create or fetch branches, then run `wto new` again")
 		}
@@ -121,7 +152,7 @@ func resolveTargetBranch(cmd *cobra.Command, deps Dependencies, branchArg string
 				return "", "", err
 			}
 
-			branchArg = normalizeBranch(result.Value)
+			branchArg = normalizeBranchForRemote(result.Value, remoteName)
 			if branchArg == "" {
 				return "", "", fmt.Errorf("branch name is empty. Enter a branch name and retry")
 			}
@@ -147,32 +178,18 @@ func resolveTargetBranch(cmd *cobra.Command, deps Dependencies, branchArg string
 		return branchArg, "", nil
 	}
 	if _, ok := remoteSet[branchArg]; ok {
-		return branchArg, defaultRemoteName + "/" + branchArg, nil
+		return branchArg, remoteName + "/" + branchArg, nil
 	}
 
-	baseBranch = normalizeBranch(baseBranch)
+	baseBranch = normalizeBranchForRemote(baseBranch, remoteName)
 	if _, ok := localSet[baseBranch]; ok {
 		return branchArg, baseBranch, nil
 	}
 	if _, ok := remoteSet[baseBranch]; ok {
-		return branchArg, defaultRemoteName + "/" + baseBranch, nil
+		return branchArg, remoteName + "/" + baseBranch, nil
 	}
 
 	return branchArg, baseBranch, nil
-}
-
-func defaultWorktreePath(repoRoot string, branch string) (string, error) {
-	repoRoot = strings.TrimSpace(repoRoot)
-	if repoRoot == "" {
-		return "", fmt.Errorf("repository root is empty. Run this command inside a Git repository, then retry")
-	}
-
-	branch = normalizeBranch(branch)
-	if branch == "" {
-		return "", fmt.Errorf("branch name is empty. Specify a branch and retry")
-	}
-
-	return filepath.Join(filepath.Dir(repoRoot), "worktrees", filepath.FromSlash(branch)), nil
 }
 
 func ensureWorktreePathAvailable(path string) error {
@@ -192,15 +209,23 @@ func ensureWorktreePathAvailable(path string) error {
 }
 
 func normalizeBranch(branch string) string {
-	branch = strings.TrimSpace(branch)
-	branch = strings.TrimPrefix(branch, "refs/heads/")
-	return strings.TrimPrefix(branch, defaultRemoteName+"/")
+	return normalizeBranchForRemote(branch, defaultRemoteName)
 }
 
-func asBranchSet(branches []string) map[string]struct{} {
+func normalizeBranchForRemote(branch string, remote string) string {
+	branch = strings.TrimSpace(branch)
+	branch = strings.TrimPrefix(branch, "refs/heads/")
+	remote = strings.TrimSpace(remote)
+	if remote != "" {
+		return strings.TrimPrefix(branch, remote+"/")
+	}
+	return branch
+}
+
+func asBranchSet(branches []string, remote string) map[string]struct{} {
 	set := make(map[string]struct{}, len(branches))
 	for _, branch := range branches {
-		normalized := normalizeBranch(branch)
+		normalized := normalizeBranchForRemote(branch, remote)
 		if normalized == "" {
 			continue
 		}
@@ -232,7 +257,7 @@ func branchCandidates(localBranches []string, remoteBranches []string, remote st
 	seen := make(map[string]struct{}, len(localBranches)+len(remoteBranches))
 
 	for _, branch := range localBranches {
-		normalized := normalizeBranch(branch)
+		normalized := normalizeBranchForRemote(branch, remote)
 		if normalized == "" {
 			continue
 		}

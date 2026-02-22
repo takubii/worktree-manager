@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/takubii/git-worktree-opener/internal/config"
 	"github.com/takubii/git-worktree-opener/internal/git"
 )
 
@@ -43,6 +44,24 @@ type fakeWorktreeRemoveCall struct {
 type fakeDeleteBranchCall struct {
 	branch string
 	force  bool
+}
+
+type fakeConfigProvider struct {
+	cfg       config.Config
+	loadCalls int
+	initForce []bool
+	initPath  string
+	initErr   error
+}
+
+func (f *fakeConfigProvider) Load(_ context.Context) config.Config {
+	f.loadCalls++
+	return f.cfg
+}
+
+func (f *fakeConfigProvider) InitGlobal(force bool) (string, error) {
+	f.initForce = append(f.initForce, force)
+	return f.initPath, f.initErr
 }
 
 func (f *fakeGitClient) WorktreeListPorcelain(_ context.Context) (string, error) {

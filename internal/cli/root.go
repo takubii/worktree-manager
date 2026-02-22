@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/takubii/git-worktree-opener/internal/config"
 	"github.com/takubii/git-worktree-opener/internal/git"
 	"github.com/takubii/git-worktree-opener/internal/opener"
 	"github.com/takubii/git-worktree-opener/internal/selector"
@@ -17,6 +18,7 @@ type Dependencies struct {
 	Git      git.Client
 	Opener   opener.Opener
 	Selector selector.Selector
+	Config   config.Provider
 }
 
 // NewRootCmd creates the root command for wto.
@@ -36,6 +38,7 @@ func NewRootCmd(deps Dependencies) *cobra.Command {
 	cmd.AddCommand(newOpenCmd(deps))
 	cmd.AddCommand(newNewCmd(deps))
 	cmd.AddCommand(newRmCmd(deps))
+	cmd.AddCommand(newConfigCmd(deps))
 
 	return cmd
 }
@@ -55,6 +58,9 @@ func withDefaults(deps Dependencies) Dependencies {
 	}
 	if deps.Selector == nil {
 		deps.Selector = selector.NewDefault(os.Stdin, deps.Stderr)
+	}
+	if deps.Config == nil {
+		deps.Config = config.NewStaticProvider(config.DefaultConfig())
 	}
 	return deps
 }
