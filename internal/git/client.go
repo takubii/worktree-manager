@@ -11,6 +11,8 @@ type Client interface {
 	RemoteBranches(ctx context.Context, remote string) ([]string, error)
 	CheckBranchName(ctx context.Context, branch string) error
 	WorktreeAdd(ctx context.Context, params WorktreeAddParams) error
+	WorktreeRemove(ctx context.Context, path string, force bool) error
+	DeleteLocalBranch(ctx context.Context, branch string, force bool) error
 }
 
 // WorktreeAddParams defines inputs for `git worktree add`.

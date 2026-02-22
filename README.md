@@ -10,6 +10,7 @@ Implemented commands:
 - `wto list`
 - `wto new`
 - `wto open`
+- `wto rm`
 
 `wto list` executes:
 
@@ -74,6 +75,22 @@ go run ./cmd/wto open --window reuse
 ```
 
 Current note: `--window` is applied to `system`, `vscode`, and `cursor`. `vim` currently uses best-effort behavior.
+
+Remove an existing worktree:
+
+```sh
+go run ./cmd/wto rm
+go run ./cmd/wto rm feature/my-task
+go run ./cmd/wto rm feature/my-task --delete-branch none
+go run ./cmd/wto rm feature/my-task --force
+```
+
+By default, `wto rm` removes the selected worktree and then safely deletes the local branch with `git branch -d`.
+
+- `--delete-branch none` skips branch deletion
+- `--delete-branch safe` uses `git branch -d`
+- `--delete-branch force` uses `git branch -D`
+- `--force` forces `git worktree remove` and, when `--delete-branch` is not explicitly set, also switches branch deletion to force
 
 ## Error example
 

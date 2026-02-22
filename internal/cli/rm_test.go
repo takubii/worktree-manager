@@ -1,0 +1,245 @@
+package cli
+
+import (
+	"bytes"
+	"strings"
+	"testing"
+)
+
+func TestRmCommand_RemovesSelectedWorktreeAndDeletesBranchByDefault(t *testing.T) {
+	t.Parallel()
+
+	gitClient := &fakeGitClient{
+		output: "worktree C:/repo\nHEAD abc\nbranch refs/heads/main\n\nworktree C:/worktrees/feature-x\nHEAD def\nbranch refs/heads/feature/x\n\n",
+	}
+	selector := &fakeSelector{index: 1}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: selector,
+		Opener:   &fakeOpener{},
+	})
+	cmd.SetArgs([]string{"rm"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if selector.calls != 1 {
+		t.Fatalf("expected selector to be called once, got %d", selector.calls)
+	}
+	if len(gitClient.worktreeRemove) != 1 {
+		t.Fatalf("expected one WorktreeRemove call, got %d", len(gitClient.worktreeRemove))
+	}
+	if got := gitClient.worktreeRemove[0].path; got != "C:/worktrees/feature-x" {
+		t.Fatalf("unexpected worktree remove path: %q", got)
+	}
+	if gitClient.worktreeRemove[0].force {
+		t.Fatal("worktree remove should not be forced by default")
+	}
+	if len(gitClient.deleteBranchCalls) != 1 {
+		t.Fatalf("expected one DeleteLocalBranch call, got %d", len(gitClient.deleteBranchCalls))
+	}
+	if got := gitClient.deleteBranchCalls[0].branch; got != "feature/x" {
+		t.Fatalf("unexpected branch deleted: %q", got)
+	}
+	if gitClient.deleteBranchCalls[0].force {
+		t.Fatal("branch deletion should be safe by default")
+	}
+}
+
+func TestRmCommand_FindsWorktreeByBranchArgument(t *testing.T) {
+	t.Parallel()
+
+	gitClient := &fakeGitClient{
+		output: "worktree C:/repo\nHEAD abc\nbranch refs/heads/main\n\nworktree C:/worktrees/feature-x\nHEAD def\nbranch refs/heads/feature/x\n\n",
+	}
+	selector := &fakeSelector{index: 0}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: selector,
+		Opener:   &fakeOpener{},
+	})
+	cmd.SetArgs([]string{"rm", "feature/x"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if selector.calls != 0 {
+		t.Fatalf("selector should not be called when branch arg is provided, got %d", selector.calls)
+	}
+	if len(gitClient.worktreeRemove) != 1 {
+		t.Fatalf("expected one WorktreeRemove call, got %d", len(gitClient.worktreeRemove))
+	}
+	if got := gitClient.worktreeRemove[0].path; got != "C:/worktrees/feature-x" {
+		t.Fatalf("unexpected worktree remove path: %q", got)
+	}
+}
+
+func TestRmCommand_ForceAlsoForcesBranchDeletionWhenPolicyNotExplicit(t *testing.T) {
+	t.Parallel()
+
+	gitClient := &fakeGitClient{
+		output: "worktree C:/worktrees/feature-x\nHEAD def\nbranch refs/heads/feature/x\n\n",
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+	})
+	cmd.SetArgs([]string{"rm", "feature/x", "--force"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if len(gitClient.worktreeRemove) != 1 || !gitClient.worktreeRemove[0].force {
+		t.Fatalf("expected forced worktree removal, got %+v", gitClient.worktreeRemove)
+	}
+	if len(gitClient.deleteBranchCalls) != 1 || !gitClient.deleteBranchCalls[0].force {
+		t.Fatalf("expected forced branch deletion, got %+v", gitClient.deleteBranchCalls)
+	}
+}
+
+func TestRmCommand_ForceDoesNotOverrideExplicitDeletePolicy(t *testing.T) {
+	t.Parallel()
+
+	gitClient := &fakeGitClient{
+		output: "worktree C:/worktrees/feature-x\nHEAD def\nbranch refs/heads/feature/x\n\n",
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+	})
+	cmd.SetArgs([]string{"rm", "feature/x", "--force", "--delete-branch", "safe"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if len(gitClient.worktreeRemove) != 1 || !gitClient.worktreeRemove[0].force {
+		t.Fatalf("expected forced worktree removal, got %+v", gitClient.worktreeRemove)
+	}
+	if len(gitClient.deleteBranchCalls) != 1 || gitClient.deleteBranchCalls[0].force {
+		t.Fatalf("expected safe branch deletion, got %+v", gitClient.deleteBranchCalls)
+	}
+}
+
+func TestRmCommand_DoesNotDeleteBranchWhenPolicyIsNone(t *testing.T) {
+	t.Parallel()
+
+	gitClient := &fakeGitClient{
+		output: "worktree C:/worktrees/feature-x\nHEAD def\nbranch refs/heads/feature/x\n\n",
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+	})
+	cmd.SetArgs([]string{"rm", "feature/x", "--delete-branch", "none"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if len(gitClient.deleteBranchCalls) != 0 {
+		t.Fatalf("DeleteLocalBranch should not be called, got %+v", gitClient.deleteBranchCalls)
+	}
+}
+
+func TestRmCommand_DoesNotDeleteBranchForDetachedWorktree(t *testing.T) {
+	t.Parallel()
+
+	gitClient := &fakeGitClient{
+		output: "worktree C:/repo\nHEAD abc\ndetached\n\n",
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+	})
+	cmd.SetArgs([]string{"rm"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if len(gitClient.worktreeRemove) != 1 {
+		t.Fatalf("expected one WorktreeRemove call, got %d", len(gitClient.worktreeRemove))
+	}
+	if len(gitClient.deleteBranchCalls) != 0 {
+		t.Fatalf("DeleteLocalBranch should not be called for detached worktree, got %+v", gitClient.deleteBranchCalls)
+	}
+}
+
+func TestRmCommand_ReturnsErrorWhenBranchDoesNotHaveWorktree(t *testing.T) {
+	t.Parallel()
+
+	gitClient := &fakeGitClient{
+		output: "worktree C:/repo\nHEAD abc\nbranch refs/heads/main\n\n",
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+	})
+	cmd.SetArgs([]string{"rm", "feature/missing"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected Execute() to return error")
+	}
+	if !strings.Contains(err.Error(), "does not have a linked worktree") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(gitClient.worktreeRemove) != 0 {
+		t.Fatalf("WorktreeRemove should not be called, got %+v", gitClient.worktreeRemove)
+	}
+}
+
+func TestRmCommand_ReturnsErrorForInvalidDeleteBranchPolicy(t *testing.T) {
+	t.Parallel()
+
+	gitClient := &fakeGitClient{
+		output: "worktree C:/worktrees/feature-x\nHEAD def\nbranch refs/heads/feature/x\n\n",
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+	})
+	cmd.SetArgs([]string{"rm", "--delete-branch", "invalid"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected Execute() to return error")
+	}
+	if !strings.Contains(err.Error(), "invalid --delete-branch value") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

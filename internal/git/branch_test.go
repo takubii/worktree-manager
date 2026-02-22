@@ -221,3 +221,106 @@ func TestExecClientWorktreeAdd_ValidatesInputs(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestExecClientWorktreeRemove_RunsExpectedArgs(t *testing.T) {
+	t.Parallel()
+
+	var gotArgs []string
+	client := newExecClient(func(ctx context.Context, _ string, args ...string) *exec.Cmd {
+		gotArgs = append([]string(nil), args...)
+
+		cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=TestHelperProcess", "--")
+		cmd.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1")
+		return cmd
+	})
+
+	err := client.WorktreeRemove(context.Background(), "/tmp/worktrees/feature/x", true)
+	if err != nil {
+		t.Fatalf("WorktreeRemove() returned error: %v", err)
+	}
+
+	expectedArgs := []string{"worktree", "remove", "--force", "/tmp/worktrees/feature/x"}
+	if !reflect.DeepEqual(gotArgs, expectedArgs) {
+		t.Fatalf("unexpected args: want=%v got=%v", expectedArgs, gotArgs)
+	}
+}
+
+func TestExecClientWorktreeRemove_ValidatesPath(t *testing.T) {
+	t.Parallel()
+
+	client := newExecClient(func(context.Context, string, ...string) *exec.Cmd {
+		t.Fatal("exec command should not be called on invalid input")
+		return nil
+	})
+
+	err := client.WorktreeRemove(context.Background(), "   ", false)
+	if err == nil {
+		t.Fatal("expected WorktreeRemove() to return error")
+	}
+	if !strings.Contains(err.Error(), "worktree path is empty") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestExecClientDeleteLocalBranch_RunsSafeDeleteByDefault(t *testing.T) {
+	t.Parallel()
+
+	var gotArgs []string
+	client := newExecClient(func(ctx context.Context, _ string, args ...string) *exec.Cmd {
+		gotArgs = append([]string(nil), args...)
+
+		cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=TestHelperProcess", "--")
+		cmd.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1")
+		return cmd
+	})
+
+	err := client.DeleteLocalBranch(context.Background(), "refs/heads/feature/x", false)
+	if err != nil {
+		t.Fatalf("DeleteLocalBranch() returned error: %v", err)
+	}
+
+	expectedArgs := []string{"branch", "-d", "feature/x"}
+	if !reflect.DeepEqual(gotArgs, expectedArgs) {
+		t.Fatalf("unexpected args: want=%v got=%v", expectedArgs, gotArgs)
+	}
+}
+
+func TestExecClientDeleteLocalBranch_RunsForceDelete(t *testing.T) {
+	t.Parallel()
+
+	var gotArgs []string
+	client := newExecClient(func(ctx context.Context, _ string, args ...string) *exec.Cmd {
+		gotArgs = append([]string(nil), args...)
+
+		cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=TestHelperProcess", "--")
+		cmd.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1")
+		return cmd
+	})
+
+	err := client.DeleteLocalBranch(context.Background(), "origin/feature/x", true)
+	if err != nil {
+		t.Fatalf("DeleteLocalBranch() returned error: %v", err)
+	}
+
+	expectedArgs := []string{"branch", "-D", "feature/x"}
+	if !reflect.DeepEqual(gotArgs, expectedArgs) {
+		t.Fatalf("unexpected args: want=%v got=%v", expectedArgs, gotArgs)
+	}
+}
+
+func TestExecClientDeleteLocalBranch_ValidatesBranch(t *testing.T) {
+	t.Parallel()
+
+	client := newExecClient(func(context.Context, string, ...string) *exec.Cmd {
+		t.Fatal("exec command should not be called on invalid input")
+		return nil
+	})
+
+	err := client.DeleteLocalBranch(context.Background(), "   ", false)
+	if err == nil {
+		t.Fatal("expected DeleteLocalBranch() to return error")
+	}
+	if !strings.Contains(err.Error(), "branch name is empty") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

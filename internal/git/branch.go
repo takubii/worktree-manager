@@ -111,6 +111,33 @@ func (c *execClient) CheckBranchName(ctx context.Context, branch string) error {
 	return nil
 }
 
+func (c *execClient) DeleteLocalBranch(ctx context.Context, branch string, force bool) error {
+	branch = normalizeBranchName(branch)
+	if branch == "" {
+		return fmt.Errorf("branch name is empty. Specify a branch to delete and retry")
+	}
+
+	args := []string{"branch"}
+	if force {
+		args = append(args, "-D")
+	} else {
+		args = append(args, "-d")
+	}
+	args = append(args, branch)
+
+	_, stderr, err := c.runGit(ctx, args...)
+	if err != nil {
+		return buildGitCommandError(
+			err,
+			stderr,
+			strings.Join(args, " "),
+			"Ensure the branch is not checked out in any worktree and, for safe deletion, is already merged; otherwise retry with `--delete-branch force`",
+		)
+	}
+
+	return nil
+}
+
 func parseBranchLines(raw string) []string {
 	lines := strings.Split(raw, "\n")
 	branches := make([]string, 0, len(lines))

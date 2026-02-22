@@ -28,7 +28,21 @@ type fakeGitClient struct {
 	checkBranchErr    error
 	worktreeAddCalls  []git.WorktreeAddParams
 	worktreeAddErr    error
+	worktreeRemove    []fakeWorktreeRemoveCall
+	worktreeRemoveErr error
+	deleteBranchCalls []fakeDeleteBranchCall
+	deleteBranchErr   error
 	callLog           []string
+}
+
+type fakeWorktreeRemoveCall struct {
+	path  string
+	force bool
+}
+
+type fakeDeleteBranchCall struct {
+	branch string
+	force  bool
 }
 
 func (f *fakeGitClient) WorktreeListPorcelain(_ context.Context) (string, error) {
@@ -69,6 +83,24 @@ func (f *fakeGitClient) CheckBranchName(_ context.Context, branch string) error 
 	f.checkBranchName = append(f.checkBranchName, branch)
 	f.callLog = append(f.callLog, "CheckBranchName")
 	return f.checkBranchErr
+}
+
+func (f *fakeGitClient) WorktreeRemove(_ context.Context, path string, force bool) error {
+	f.worktreeRemove = append(f.worktreeRemove, fakeWorktreeRemoveCall{
+		path:  path,
+		force: force,
+	})
+	f.callLog = append(f.callLog, "WorktreeRemove")
+	return f.worktreeRemoveErr
+}
+
+func (f *fakeGitClient) DeleteLocalBranch(_ context.Context, branch string, force bool) error {
+	f.deleteBranchCalls = append(f.deleteBranchCalls, fakeDeleteBranchCall{
+		branch: branch,
+		force:  force,
+	})
+	f.callLog = append(f.callLog, "DeleteLocalBranch")
+	return f.deleteBranchErr
 }
 
 func TestListCommand_WritesGitOutput(t *testing.T) {

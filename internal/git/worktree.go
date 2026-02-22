@@ -67,6 +67,31 @@ func (c *execClient) WorktreeAdd(ctx context.Context, params WorktreeAddParams) 
 	return nil
 }
 
+func (c *execClient) WorktreeRemove(ctx context.Context, path string, force bool) error {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return fmt.Errorf("worktree path is empty. Provide a valid worktree path and retry")
+	}
+
+	args := []string{"worktree", "remove"}
+	if force {
+		args = append(args, "--force")
+	}
+	args = append(args, path)
+
+	_, stderr, err := c.runGit(ctx, args...)
+	if err != nil {
+		return buildGitCommandError(
+			err,
+			stderr,
+			strings.Join(args, " "),
+			"Ensure the worktree path exists and is not in use, then retry (or use `--force` when appropriate)",
+		)
+	}
+
+	return nil
+}
+
 func (c *execClient) runGit(ctx context.Context, args ...string) (string, string, error) {
 	cmd := c.execCommand(ctx, "git", args...)
 
