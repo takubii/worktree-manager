@@ -59,8 +59,14 @@ func newRmCmd(deps Dependencies) *cobra.Command {
 				return err
 			}
 
-			if err := deps.Git.WorktreeRemove(cmd.Context(), selected.Path, removeForce); err != nil {
-				return err
+			if selected.Prunable {
+				if err := deps.Git.WorktreePrune(cmd.Context()); err != nil {
+					return err
+				}
+			} else {
+				if err := deps.Git.WorktreeRemove(cmd.Context(), selected.Path, removeForce); err != nil {
+					return err
+				}
 			}
 
 			if deleteMode == deleteBranchNone {
@@ -116,7 +122,7 @@ func selectWorktreeForRemove(ctx context.Context, deps Dependencies, args []stri
 
 	options := make([]string, len(worktrees))
 	for i, wt := range worktrees {
-		options[i] = formatWorktreeOption(wt)
+		options[i] = formatWorktreeOptionForRemove(wt)
 	}
 
 	selectedIndex, err := deps.Selector.Select(ctx, "Select a worktree to remove:", options)
@@ -128,6 +134,15 @@ func selectWorktreeForRemove(ctx context.Context, deps Dependencies, args []stri
 	}
 
 	return worktrees[selectedIndex], nil
+}
+
+func formatWorktreeOptionForRemove(wt git.Worktree) string {
+	status := "active"
+	if wt.Prunable {
+		status = "stale"
+	}
+
+	return fmt.Sprintf("%s\t[%s]", formatWorktreeOption(wt), status)
 }
 
 func findWorktreeByBranch(worktrees []git.Worktree, targetBranch string) (git.Worktree, error) {

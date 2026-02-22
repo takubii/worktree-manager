@@ -19,6 +19,10 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 		Short: "Select and open an existing worktree",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := deps.Git.WorktreePrune(cmd.Context()); err != nil {
+				return err
+			}
+
 			cfg := deps.Config.Load(cmd.Context())
 
 			if !cmd.Flags().Changed("open") {
@@ -46,8 +50,14 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 				return fmt.Errorf("no worktrees found. Create one first, then run `wto open`")
 			}
 
-			options := make([]string, len(worktrees))
-			for i, wt := range worktrees {
+			activeWorktrees, prunable := splitPrunableWorktrees(worktrees)
+			warnSkippedPrunableWorktrees(cmd.ErrOrStderr(), "wto open", prunable)
+			if len(activeWorktrees) == 0 {
+				return fmt.Errorf("no valid worktrees found after pruning stale entries. Run `wto new` to create one, then retry")
+			}
+
+			options := make([]string, len(activeWorktrees))
+			for i, wt := range activeWorktrees {
 				options[i] = formatWorktreeOption(wt)
 			}
 
@@ -55,11 +65,11 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if selectedIndex < 0 || selectedIndex >= len(worktrees) {
+			if selectedIndex < 0 || selectedIndex >= len(activeWorktrees) {
 				return fmt.Errorf("invalid worktree selection index: %d", selectedIndex)
 			}
 
-			selected := worktrees[selectedIndex]
+			selected := activeWorktrees[selectedIndex]
 			if err := deps.Opener.Open(cmd.Context(), openerName, selected.Path, windowMode); err != nil {
 				return err
 			}

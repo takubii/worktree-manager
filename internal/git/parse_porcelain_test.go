@@ -42,10 +42,27 @@ func TestParseWorktreeListPorcelain_DetachedEntry(t *testing.T) {
 	}
 }
 
-func TestParseWorktreeListPorcelain_IgnoresUnknownLines(t *testing.T) {
+func TestParseWorktreeListPorcelain_ParsesPrunableLine(t *testing.T) {
 	t.Parallel()
 
 	raw := "worktree C:/repo3\nHEAD ghi\nprunable gitdir file\nbranch refs/heads/feature\n\n"
+	worktrees, err := ParseWorktreeListPorcelain(raw)
+	if err != nil {
+		t.Fatalf("ParseWorktreeListPorcelain() returned error: %v", err)
+	}
+
+	if len(worktrees) != 1 {
+		t.Fatalf("expected 1 worktree, got %d", len(worktrees))
+	}
+	if !worktrees[0].Prunable {
+		t.Fatalf("expected prunable=true, got false")
+	}
+}
+
+func TestParseWorktreeListPorcelain_IgnoresUnknownLines(t *testing.T) {
+	t.Parallel()
+
+	raw := "worktree C:/repo3\nHEAD ghi\nlocked reason\nbranch refs/heads/feature\n\n"
 	worktrees, err := ParseWorktreeListPorcelain(raw)
 	if err != nil {
 		t.Fatalf("ParseWorktreeListPorcelain() returned error: %v", err)

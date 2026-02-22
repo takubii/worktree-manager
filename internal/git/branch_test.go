@@ -262,6 +262,28 @@ func TestExecClientWorktreeRemove_ValidatesPath(t *testing.T) {
 	}
 }
 
+func TestExecClientWorktreePrune_RunsExpectedArgs(t *testing.T) {
+	t.Parallel()
+
+	var gotArgs []string
+	client := newExecClient(func(ctx context.Context, _ string, args ...string) *exec.Cmd {
+		gotArgs = append([]string(nil), args...)
+
+		cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=TestHelperProcess", "--")
+		cmd.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1")
+		return cmd
+	})
+
+	if err := client.WorktreePrune(context.Background()); err != nil {
+		t.Fatalf("WorktreePrune() returned error: %v", err)
+	}
+
+	expectedArgs := []string{"worktree", "prune", "--expire", "now"}
+	if !reflect.DeepEqual(gotArgs, expectedArgs) {
+		t.Fatalf("unexpected args: want=%v got=%v", expectedArgs, gotArgs)
+	}
+}
+
 func TestExecClientDeleteLocalBranch_RunsSafeDeleteByDefault(t *testing.T) {
 	t.Parallel()
 

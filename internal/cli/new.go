@@ -28,6 +28,10 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 		Short: "Create and open a new worktree",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := deps.Git.WorktreePrune(cmd.Context()); err != nil {
+				return err
+			}
+
 			cfg := deps.Config.Load(cmd.Context())
 
 			remoteName := cfg.Remote

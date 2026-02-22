@@ -44,7 +44,7 @@ go run ./cmd/wto new feature/my-task
 go run ./cmd/wto new feature/my-task --base main --open vscode
 ```
 
-By default, `wto new` runs `git fetch origin --prune`, uses `main` as the base when creating a new branch, creates the worktree under `<repo-parent>/worktrees/<branch>`, and opens it with the `system` opener in a new window.
+By default, `wto new` runs `git worktree prune --expire now`, then `git fetch origin --prune`, uses `main` as the base when creating a new branch, creates the worktree under `<repo-parent>/worktrees/<branch>`, and opens it with the `system` opener in a new window.
 
 When running `wto new` without a branch argument:
 
@@ -59,6 +59,8 @@ go run ./cmd/wto open
 ```
 
 By default, `wto open` prefers opening in a new window where supported.
+
+Before listing candidates, `wto open` runs `git worktree prune --expire now` and skips entries marked as `prunable` (stale metadata).
 
 Choose opener explicitly:
 
@@ -88,6 +90,13 @@ go run ./cmd/wto rm feature/my-task --force
 ```
 
 By default, `wto rm` removes the selected worktree and then safely deletes the local branch with `git branch -d`.
+
+`wto rm` also shows stale entries (marked `prunable`) in selection as `[stale]`.
+When a stale entry is selected, it is cleaned up via `git worktree prune --expire now`.
+Selection rows use suffix status labels:
+
+- `<branch>\t<path>\t[active]`
+- `<branch>\t<path>\t[stale]`
 
 - `--delete-branch none` skips branch deletion
 - `--delete-branch safe` uses `git branch -d`

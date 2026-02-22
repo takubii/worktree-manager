@@ -35,6 +35,21 @@ func (c *execClient) WorktreeListPorcelain(ctx context.Context) (string, error) 
 	return stdout, nil
 }
 
+func (c *execClient) WorktreePrune(ctx context.Context) error {
+	args := []string{"worktree", "prune", "--expire", "now"}
+	_, stderr, err := c.runGit(ctx, args...)
+	if err != nil {
+		return buildGitCommandError(
+			err,
+			stderr,
+			strings.Join(args, " "),
+			"Run this command inside a Git repository, then retry",
+		)
+	}
+
+	return nil
+}
+
 func (c *execClient) WorktreeAdd(ctx context.Context, params WorktreeAddParams) error {
 	path := strings.TrimSpace(params.Path)
 	if path == "" {

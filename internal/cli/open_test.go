@@ -12,13 +12,17 @@ import (
 )
 
 type fakeSelector struct {
-	index int
-	err   error
-	calls int
+	index       int
+	err         error
+	calls       int
+	lastPrompt  string
+	lastOptions []string
 }
 
-func (s *fakeSelector) Select(_ context.Context, _ string, _ []string) (int, error) {
+func (s *fakeSelector) Select(_ context.Context, prompt string, options []string) (int, error) {
 	s.calls++
+	s.lastPrompt = prompt
+	s.lastOptions = append([]string(nil), options...)
 	return s.index, s.err
 }
 
@@ -65,6 +69,9 @@ func TestOpenCommand_OpensSelectedWorktree(t *testing.T) {
 	if selector.calls != 1 {
 		t.Fatalf("expected selector to be called once, got %d", selector.calls)
 	}
+	if gitClient.worktreePruneCall != 1 {
+		t.Fatalf("expected WorktreePrune to be called once, got %d", gitClient.worktreePruneCall)
+	}
 	if openExec.call != 1 {
 		t.Fatalf("expected opener to be called once, got %d", openExec.call)
 	}
@@ -76,6 +83,65 @@ func TestOpenCommand_OpensSelectedWorktree(t *testing.T) {
 	}
 	if openExec.window != openerpkg.WindowNew {
 		t.Fatalf("unexpected window mode: %q", openExec.window)
+	}
+}
+
+func TestOpenCommand_SkipsPrunableWorktrees(t *testing.T) {
+	t.Parallel()
+
+	var stderr bytes.Buffer
+	gitClient := &fakeGitClient{
+		output: "worktree C:/worktrees/stale\nHEAD abc\nbranch refs/heads/aaa\nprunable gitdir file points to non-existent location\n\n" +
+			"worktree C:/worktrees/live\nHEAD def\nbranch refs/heads/main\n\n",
+	}
+	selector := &fakeSelector{index: 0}
+	openExec := &fakeOpener{}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &stderr,
+		Git:      gitClient,
+		Selector: selector,
+		Opener:   openExec,
+	})
+	cmd.SetArgs([]string{"open"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if openExec.path != "C:/worktrees/live" {
+		t.Fatalf("unexpected opener path: %q", openExec.path)
+	}
+	if !strings.Contains(stderr.String(), "skipped 1 stale worktree entries") {
+		t.Fatalf("expected stale warning, got: %s", stderr.String())
+	}
+}
+
+func TestOpenCommand_ReturnsErrorWhenOnlyPrunableRemain(t *testing.T) {
+	t.Parallel()
+
+	gitClient := &fakeGitClient{
+		output: "worktree C:/worktrees/stale\nHEAD abc\nbranch refs/heads/aaa\nprunable gitdir file points to non-existent location\n\n",
+	}
+	selector := &fakeSelector{index: 0}
+	openExec := &fakeOpener{}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: selector,
+		Opener:   openExec,
+	})
+	cmd.SetArgs([]string{"open"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected Execute() to return error")
+	}
+	if !strings.Contains(err.Error(), "no valid worktrees found after pruning stale entries") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -196,6 +262,31 @@ func TestOpenCommand_ReturnsErrorForInvalidWindowMode(t *testing.T) {
 	}
 	if openExec.call != 0 {
 		t.Fatalf("opener should not be called on invalid window mode, got %d", openExec.call)
+	}
+}
+
+func TestOpenCommand_ReturnsPruneError(t *testing.T) {
+	t.Parallel()
+
+	gitClient := &fakeGitClient{
+		worktreePruneErr: errors.New("failed to run `git worktree prune --expire now`"),
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+	})
+	cmd.SetArgs([]string{"open"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected Execute() to return error")
+	}
+	if !strings.Contains(err.Error(), "worktree prune") {
+		t.Fatalf("unexpected error message: %v", err)
 	}
 }
 

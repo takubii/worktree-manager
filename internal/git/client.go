@@ -5,6 +5,7 @@ import "context"
 // Client defines Git operations used by CLI commands.
 type Client interface {
 	WorktreeListPorcelain(ctx context.Context) (string, error)
+	WorktreePrune(ctx context.Context) error
 	RepoRoot(ctx context.Context) (string, error)
 	FetchPrune(ctx context.Context, remote string) error
 	LocalBranches(ctx context.Context) ([]string, error)
@@ -27,6 +28,7 @@ type Worktree struct {
 	Path     string
 	Branch   string
 	Detached bool
+	Prunable bool
 }
 
 // NewClient returns a Client backed by the system git command.

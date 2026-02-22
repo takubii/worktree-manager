@@ -46,6 +46,9 @@ func TestNewCommand_CreatesWorktreeFromLocalBranch(t *testing.T) {
 	if gitClient.fetchRemote != "origin" {
 		t.Fatalf("unexpected fetch remote: %q", gitClient.fetchRemote)
 	}
+	if gitClient.worktreePruneCall != 1 {
+		t.Fatalf("expected WorktreePrune to be called once, got %d", gitClient.worktreePruneCall)
+	}
 	if gitClient.remoteName != "origin" {
 		t.Fatalf("unexpected remote query name: %q", gitClient.remoteName)
 	}

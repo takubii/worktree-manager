@@ -12,9 +12,10 @@ import (
 )
 
 type fakeGitClient struct {
-	output string
-	err    error
-	calls  int
+	output       string
+	outputByCall []string
+	err          error
+	calls        int
 
 	fetchRemote       string
 	fetchErr          error
@@ -29,6 +30,8 @@ type fakeGitClient struct {
 	checkBranchErr    error
 	worktreeAddCalls  []git.WorktreeAddParams
 	worktreeAddErr    error
+	worktreePruneErr  error
+	worktreePruneCall int
 	worktreeRemove    []fakeWorktreeRemoveCall
 	worktreeRemoveErr error
 	deleteBranchCalls []fakeDeleteBranchCall
@@ -67,6 +70,13 @@ func (f *fakeConfigProvider) InitGlobal(force bool) (string, error) {
 func (f *fakeGitClient) WorktreeListPorcelain(_ context.Context) (string, error) {
 	f.calls++
 	f.callLog = append(f.callLog, "WorktreeListPorcelain")
+	if len(f.outputByCall) > 0 {
+		index := f.calls - 1
+		if index >= 0 && index < len(f.outputByCall) {
+			return f.outputByCall[index], f.err
+		}
+		return f.outputByCall[len(f.outputByCall)-1], f.err
+	}
 	return f.output, f.err
 }
 
@@ -96,6 +106,12 @@ func (f *fakeGitClient) WorktreeAdd(_ context.Context, params git.WorktreeAddPar
 	f.worktreeAddCalls = append(f.worktreeAddCalls, params)
 	f.callLog = append(f.callLog, "WorktreeAdd")
 	return f.worktreeAddErr
+}
+
+func (f *fakeGitClient) WorktreePrune(_ context.Context) error {
+	f.worktreePruneCall++
+	f.callLog = append(f.callLog, "WorktreePrune")
+	return f.worktreePruneErr
 }
 
 func (f *fakeGitClient) CheckBranchName(_ context.Context, branch string) error {

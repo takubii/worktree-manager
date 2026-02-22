@@ -328,3 +328,132 @@ func TestRmCommand_FlagDeleteBranchOverridesConfig(t *testing.T) {
 		t.Fatalf("expected safe delete, got force=true")
 	}
 }
+
+func TestRmCommand_AllowsSelectingStaleWorktree(t *testing.T) {
+	t.Parallel()
+
+	gitClient := &fakeGitClient{
+		output: "worktree C:/worktrees/stale\nHEAD abc\nbranch refs/heads/aaa\nprunable gitdir file points to non-existent location\n\n" +
+			"worktree C:/worktrees/live\nHEAD def\nbranch refs/heads/feature/x\n\n",
+	}
+	selector := &fakeSelector{index: 0}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: selector,
+		Opener:   &fakeOpener{},
+	})
+	cmd.SetArgs([]string{"rm"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if len(gitClient.worktreeRemove) != 0 {
+		t.Fatalf("WorktreeRemove should not be called for stale selection, got %+v", gitClient.worktreeRemove)
+	}
+	if gitClient.worktreePruneCall != 1 {
+		t.Fatalf("expected one WorktreePrune call for stale cleanup, got %d", gitClient.worktreePruneCall)
+	}
+	if len(selector.lastOptions) != 2 {
+		t.Fatalf("expected 2 selector options, got %d", len(selector.lastOptions))
+	}
+	if !strings.HasSuffix(selector.lastOptions[0], "\t[stale]") {
+		t.Fatalf("expected stale status suffix, got: %q", selector.lastOptions[0])
+	}
+	if !strings.HasSuffix(selector.lastOptions[1], "\t[active]") {
+		t.Fatalf("expected active status suffix, got: %q", selector.lastOptions[1])
+	}
+}
+
+func TestRmCommand_RemovesStaleWhenOnlyPrunableExists(t *testing.T) {
+	t.Parallel()
+
+	gitClient := &fakeGitClient{
+		output: "worktree C:/worktrees/stale\nHEAD abc\nbranch refs/heads/aaa\nprunable gitdir file points to non-existent location\n\n",
+	}
+	selector := &fakeSelector{index: 0}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: selector,
+		Opener:   &fakeOpener{},
+	})
+	cmd.SetArgs([]string{"rm"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if len(gitClient.worktreeRemove) != 0 {
+		t.Fatalf("WorktreeRemove should not be called for stale entry, got %+v", gitClient.worktreeRemove)
+	}
+	if gitClient.worktreePruneCall != 1 {
+		t.Fatalf("expected WorktreePrune to be called once, got %d", gitClient.worktreePruneCall)
+	}
+}
+
+func TestRmCommand_RemovesActiveWhenSelected(t *testing.T) {
+	t.Parallel()
+
+	gitClient := &fakeGitClient{
+		output: "worktree C:/worktrees/stale\nHEAD abc\nbranch refs/heads/aaa\nprunable gitdir file points to non-existent location\n\n" +
+			"worktree C:/worktrees/live\nHEAD def\nbranch refs/heads/feature/x\n\n",
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 1},
+		Opener:   &fakeOpener{},
+	})
+	cmd.SetArgs([]string{"rm"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if len(gitClient.worktreeRemove) != 1 {
+		t.Fatalf("expected one WorktreeRemove call, got %d", len(gitClient.worktreeRemove))
+	}
+	if gitClient.worktreeRemove[0].path != "C:/worktrees/live" {
+		t.Fatalf("unexpected removed worktree path: %q", gitClient.worktreeRemove[0].path)
+	}
+	if gitClient.worktreePruneCall != 0 {
+		t.Fatalf("did not expect prune for active removal, got %d", gitClient.worktreePruneCall)
+	}
+}
+
+func TestRmCommand_RemovesStaleByBranchArgument(t *testing.T) {
+	t.Parallel()
+
+	gitClient := &fakeGitClient{
+		output: "worktree C:/worktrees/stale\nHEAD abc\nbranch refs/heads/feature/stale\nprunable gitdir file points to non-existent location\n\n" +
+			"worktree C:/repo\nHEAD def\nbranch refs/heads/main\n\n",
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+	})
+	cmd.SetArgs([]string{"rm", "feature/stale"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if gitClient.worktreePruneCall != 1 {
+		t.Fatalf("expected WorktreePrune to be called once, got %d", gitClient.worktreePruneCall)
+	}
+	if len(gitClient.worktreeRemove) != 0 {
+		t.Fatalf("WorktreeRemove should not be called for stale branch cleanup, got %+v", gitClient.worktreeRemove)
+	}
+}
