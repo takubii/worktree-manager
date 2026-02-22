@@ -22,24 +22,27 @@ Repository rules for human/AI contributors.
 
 ## Go Coding Rules
 
-1. Run `goimports` on changed Go files before finishing.
-2. Use: `goimports -w <changed-go-files>`.
+1. Use `golangci-lint` as the primary lint/format toolchain.
+2. Prefer `golangci-lint fmt` for Go formatting (including import organization configured in `.golangci.yaml`).
 3. Keep `cmd/wto/main.go` minimal (wiring + process exit handling only).
 4. Keep CLI wiring in `internal/cli`.
 5. Keep Git command execution in `internal/git`.
 6. Prefer dependency injection via interfaces for testability.
 7. Use `context.Context` for operations that may block or call external commands.
+8. Keep tests environment-independent by stubbing external dependencies (`LookPath`, `Selector`, `Opener`, `Git`) instead of relying on host-installed tools.
 
 ## Testing Rules
 
 1. Add or update tests for behavior changes.
 2. Prefer unit tests near changed packages.
 3. Before finalizing, run in this order:
-   - `goimports` on changed files
+   - `golangci-lint fmt`
+   - `golangci-lint run`
    - `go test ./...`
 4. For CLI-impacting changes, also smoke test:
    - `go run ./cmd/wto --help`
    - `go run ./cmd/wto list` (run inside a Git repository, if applicable)
+5. Keep CI parity with `.github/workflows/ci.yaml` (lint + tests + cross-platform build expectations).
 
 ## Dependency Rules
 
