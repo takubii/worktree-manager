@@ -6,15 +6,16 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/takubii/git-worktree-opener/internal/config"
 	"github.com/takubii/git-worktree-opener/internal/git"
 )
 
 type deleteBranchMode string
 
 const (
-	deleteBranchNone  deleteBranchMode = "none"
-	deleteBranchSafe  deleteBranchMode = "safe"
-	deleteBranchForce deleteBranchMode = "force"
+	deleteBranchNone  deleteBranchMode = config.DeleteBranchNone
+	deleteBranchSafe  deleteBranchMode = config.DeleteBranchSafe
+	deleteBranchForce deleteBranchMode = config.DeleteBranchForce
 )
 
 func newRmCmd(deps Dependencies) *cobra.Command {
@@ -76,7 +77,12 @@ func newRmCmd(deps Dependencies) *cobra.Command {
 	}
 
 	cmd.Flags().BoolVar(&removeForce, "force", false, "force worktree removal; when --delete-branch is not set, branch deletion also becomes force")
-	cmd.Flags().StringVar(&deleteBranchRaw, "delete-branch", string(deleteBranchSafe), "local branch deletion policy: none|safe|force")
+	cmd.Flags().StringVar(
+		&deleteBranchRaw,
+		"delete-branch",
+		string(deleteBranchSafe),
+		"local branch deletion policy: "+config.SupportedDeleteBranchModesText,
+	)
 
 	return cmd
 }
@@ -90,7 +96,7 @@ func parseDeleteBranchMode(raw string) (deleteBranchMode, error) {
 	case deleteBranchForce:
 		return deleteBranchForce, nil
 	default:
-		return "", fmt.Errorf("invalid --delete-branch value %q. Use one of: none, safe, force", raw)
+		return "", fmt.Errorf("invalid --delete-branch value %q. Use one of: %s", raw, config.SupportedDeleteBranchModesText)
 	}
 }
 

@@ -108,12 +108,11 @@ func normalizeOpenKind(value *string) (*string, error) {
 	}
 
 	trimmed := strings.ToLower(strings.TrimSpace(*value))
-	switch trimmed {
-	case opener.KindSystem, opener.KindVSCode, opener.KindCursor, opener.KindVim:
+	if _, ok := supportedOpenKinds[trimmed]; ok {
 		return &trimmed, nil
-	default:
-		return nil, fmt.Errorf("open.default %q is invalid. Use one of: system, vscode, cursor, vim", *value)
 	}
+
+	return nil, fmt.Errorf("open.default %q is invalid. Use one of: %s", *value, SupportedOpenKindsText)
 }
 
 func normalizeWindow(value *string) (*string, error) {
@@ -138,7 +137,7 @@ func normalizeDeleteBranch(value *string) (*string, error) {
 	case DeleteBranchNone, DeleteBranchSafe, DeleteBranchForce:
 		return &trimmed, nil
 	default:
-		return nil, fmt.Errorf("rm.deleteBranch %q is invalid. Use one of: none, safe, force", *value)
+		return nil, fmt.Errorf("rm.deleteBranch %q is invalid. Use one of: %s", *value, SupportedDeleteBranchModesText)
 	}
 }
 
@@ -165,12 +164,11 @@ func validateTemplatePlaceholders(template string) error {
 			continue
 		}
 
-		switch match[1] {
-		case "repoParent", "repoRoot", "branch":
-		default:
+		if _, ok := supportedTemplateTokens[match[1]]; !ok {
 			return fmt.Errorf(
-				"worktreeDirTemplate placeholder %q is not supported. Use only: {repoParent}, {repoRoot}, {branch}",
+				"worktreeDirTemplate placeholder %q is not supported. Use only: %s",
 				match[0],
+				SupportedWorktreeTemplateTokensText,
 			)
 		}
 	}

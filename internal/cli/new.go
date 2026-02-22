@@ -120,7 +120,7 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&baseBranch, "base", defaultBaseBranch, "base branch used when creating a new branch")
-	cmd.Flags().StringVar(&openerName, "open", "system", "opener to use: system|vscode|cursor|vim")
+	cmd.Flags().StringVar(&openerName, "open", config.DefaultOpenKind, "opener to use: "+config.SupportedOpenKindsText)
 
 	return cmd
 }

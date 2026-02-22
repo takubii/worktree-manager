@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/takubii/git-worktree-opener/internal/config"
 	"github.com/takubii/git-worktree-opener/internal/git"
 	"github.com/takubii/git-worktree-opener/internal/opener"
 )
@@ -67,8 +68,8 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&openerName, "open", "system", "opener to use: system|vscode|cursor|vim")
-	cmd.Flags().StringVar(&windowModeRaw, "window", string(opener.WindowNew), "window behavior: new|reuse")
+	cmd.Flags().StringVar(&openerName, "open", config.DefaultOpenKind, "opener to use: "+config.SupportedOpenKindsText)
+	cmd.Flags().StringVar(&windowModeRaw, "window", config.DefaultOpenWindow, "window behavior: "+config.SupportedWindowModesText)
 	return cmd
 }
 

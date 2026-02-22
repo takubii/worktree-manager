@@ -1,7 +1,5 @@
 package config
 
-import "github.com/takubii/git-worktree-opener/internal/opener"
-
 const (
 	// DefaultRemote is the built-in remote name.
 	DefaultRemote = "origin"
@@ -25,8 +23,8 @@ func DefaultConfig() Config {
 		BaseBranch:          DefaultBaseBranch,
 		WorktreeDirTemplate: DefaultWorktreeDirTemplate,
 		Open: Open{
-			Default: opener.KindSystem,
-			Window:  string(opener.WindowNew),
+			Default: DefaultOpenKind,
+			Window:  DefaultOpenWindow,
 		},
 		RM: RM{
 			DeleteBranch: DeleteBranchSafe,
