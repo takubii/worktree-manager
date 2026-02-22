@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 
@@ -489,5 +490,48 @@ func TestRmCommand_RemovesStaleByBranchArgument(t *testing.T) {
 	}
 	if len(gitClient.worktreeRemove) != 0 {
 		t.Fatalf("WorktreeRemove should not be called for stale branch cleanup, got %+v", gitClient.worktreeRemove)
+	}
+}
+
+func TestRmCommand_ReturnsErrorWhenCurrentDirectoryIsInsideTargetWorktree(t *testing.T) {
+	t.Parallel()
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() returned error: %v", err)
+	}
+	path := strings.ReplaceAll(cwd, "\\", "/")
+	gitClient := &fakeGitClient{
+		repoRoot: path,
+		output:   "worktree " + path + "\nHEAD abc\nbranch refs/heads/main\n\n",
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+	})
+	cmd.SetArgs([]string{"rm", "main"})
+
+	err = cmd.Execute()
+	if err == nil {
+		t.Fatal("expected Execute() to return error")
+	}
+	if !strings.Contains(err.Error(), "current directory is inside the target worktree") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(err.Error(), "cd /d") {
+		t.Fatalf("expected guidance with cd example, got: %v", err)
+	}
+	if len(gitClient.worktreeRemove) != 0 {
+		t.Fatalf("WorktreeRemove should not be called, got %+v", gitClient.worktreeRemove)
+	}
+	if gitClient.worktreePruneCall != 0 {
+		t.Fatalf("WorktreePrune should not be called, got %d", gitClient.worktreePruneCall)
+	}
+	if len(gitClient.deleteBranchCalls) != 0 {
+		t.Fatalf("DeleteLocalBranch should not be called, got %+v", gitClient.deleteBranchCalls)
 	}
 }

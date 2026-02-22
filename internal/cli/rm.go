@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -56,6 +57,9 @@ func newRmCmd(deps Dependencies) *cobra.Command {
 
 			selected, err := selectWorktreeForRemove(cmd.Context(), deps, args, worktrees)
 			if err != nil {
+				return err
+			}
+			if err := ensureSafeCWDForWorktreeRemove(cmd.Context(), deps, selected); err != nil {
 				return err
 			}
 
@@ -183,4 +187,29 @@ func worktreeLocalBranch(wt git.Worktree) (string, bool) {
 	}
 
 	return branch, true
+}
+
+func ensureSafeCWDForWorktreeRemove(ctx context.Context, deps Dependencies, target git.Worktree) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to resolve current working directory: %w", err)
+	}
+
+	if !isPathWithinWorktree(cwd, target.Path) {
+		return nil
+	}
+
+	repoRoot, repoErr := deps.Git.RepoRoot(ctx)
+	if repoErr == nil && strings.TrimSpace(repoRoot) != "" {
+		return fmt.Errorf(
+			"current directory is inside the target worktree (%s). Move to another directory (for example, `cd /d %s`) and retry. Run `wto list` to inspect worktree paths",
+			target.Path,
+			repoRoot,
+		)
+	}
+
+	return fmt.Errorf(
+		"current directory is inside the target worktree (%s). Move to another directory and retry. Run `wto list` to inspect worktree paths",
+		target.Path,
+	)
 }

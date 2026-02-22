@@ -110,6 +110,8 @@ go run ./cmd/wto rm feature/my-task --force
 
 By default, `wto rm` removes the selected worktree and then safely deletes the local branch with `git branch -d`.
 
+`wto rm` refuses to remove a worktree when your current directory is inside that target worktree. Move to another directory and retry.
+
 `wto rm` also shows stale entries (marked `prunable`) in selection as `[stale]`.
 When a stale entry is selected, it is cleaned up via `git worktree prune --expire now`.
 Selection rows use suffix status labels:
