@@ -556,6 +556,7 @@ func TestNewCommand_FlagsOverrideConfigDefaults(t *testing.T) {
 		Stdout:   &bytes.Buffer{},
 		Stderr:   &bytes.Buffer{},
 		Git:      gitClient,
+		LookPath: newTestLookPath(map[string]bool{"code": true}),
 		Selector: &fakeSelector{index: 0},
 		Opener:   openExec,
 		Config:   cfgProvider,
