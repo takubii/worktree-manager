@@ -52,12 +52,14 @@ func ParseWorktreeListPorcelain(raw string) ([]Worktree, error) {
 		switch {
 		case strings.HasPrefix(line, "branch "):
 			current.Branch = strings.TrimSpace(strings.TrimPrefix(line, "branch "))
+		case strings.HasPrefix(line, "HEAD "):
+			current.Head = strings.TrimSpace(strings.TrimPrefix(line, "HEAD "))
 		case line == "detached":
 			current.Detached = true
 		case strings.HasPrefix(line, "prunable"):
 			current.Prunable = true
 		default:
-			// Intentionally ignore lines such as HEAD, bare, and locked.
+			// Intentionally ignore lines such as bare and locked.
 		}
 	}
 

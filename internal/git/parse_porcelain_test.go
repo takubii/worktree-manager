@@ -20,6 +20,9 @@ func TestParseWorktreeListPorcelain_BranchEntry(t *testing.T) {
 	if worktrees[0].Branch != "refs/heads/main" {
 		t.Fatalf("unexpected branch: %q", worktrees[0].Branch)
 	}
+	if worktrees[0].Head != "abc" {
+		t.Fatalf("unexpected head: %q", worktrees[0].Head)
+	}
 	if worktrees[0].Detached {
 		t.Fatalf("unexpected detached state: %v", worktrees[0].Detached)
 	}
@@ -37,6 +40,9 @@ func TestParseWorktreeListPorcelain_DetachedEntry(t *testing.T) {
 	if len(worktrees) != 1 {
 		t.Fatalf("expected 1 worktree, got %d", len(worktrees))
 	}
+	if worktrees[0].Head != "def" {
+		t.Fatalf("unexpected head: %q", worktrees[0].Head)
+	}
 	if !worktrees[0].Detached {
 		t.Fatalf("expected detached state true")
 	}
@@ -53,6 +59,9 @@ func TestParseWorktreeListPorcelain_ParsesPrunableLine(t *testing.T) {
 
 	if len(worktrees) != 1 {
 		t.Fatalf("expected 1 worktree, got %d", len(worktrees))
+	}
+	if worktrees[0].Head != "ghi" {
+		t.Fatalf("unexpected head: %q", worktrees[0].Head)
 	}
 	if !worktrees[0].Prunable {
 		t.Fatalf("expected prunable=true, got false")

@@ -27,6 +27,7 @@ type WorktreeAddParams struct {
 type Worktree struct {
 	Path     string
 	Branch   string
+	Head     string
 	Detached bool
 	Prunable bool
 }

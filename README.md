@@ -20,7 +20,7 @@ Implemented commands:
 git worktree list --porcelain
 ```
 
-and prints the result as-is.
+and renders a readable table by default.
 
 ## Usage
 
@@ -34,7 +34,24 @@ List worktrees in the current repository:
 
 ```sh
 go run ./cmd/wto list
+go run ./cmd/wto list --format table
+go run ./cmd/wto list --format raw
+go run ./cmd/wto list --format json
 ```
+
+`wto list` format behavior:
+
+- default (`table`): `<marker> | BRANCH | STATUS | HEAD | PATH`
+- `raw`: original `git worktree list --porcelain` output (backward-compatible)
+- `json`: machine-readable array output
+
+`<marker>` header is intentionally blank and shows `*` for the current working tree row.
+
+`STATUS` values:
+
+- `active`: normal entry and path exists
+- `stale`: marked as `prunable` by Git
+- `missing`: not prunable, but local path does not exist
 
 Create a new worktree:
 

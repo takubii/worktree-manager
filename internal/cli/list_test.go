@@ -3,7 +3,10 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -138,13 +141,29 @@ func (f *fakeGitClient) DeleteLocalBranch(_ context.Context, branch string, forc
 	return f.deleteBranchErr
 }
 
-func TestListCommand_WritesGitOutput(t *testing.T) {
+func TestListCommand_DefaultFormatRendersTable(t *testing.T) {
 	t.Parallel()
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() returned error: %v", err)
+	}
+	otherPath := filepath.Join(t.TempDir(), "worktree-a")
+	if err := os.MkdirAll(otherPath, 0o755); err != nil {
+		t.Fatalf("MkdirAll() returned error: %v", err)
+	}
+
+	raw := "worktree " + strings.ReplaceAll(otherPath, "\\", "/") + "\n" +
+		"HEAD bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n" +
+		"branch refs/heads/aaa\n\n" +
+		"worktree " + strings.ReplaceAll(cwd, "\\", "/") + "\n" +
+		"HEAD aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n" +
+		"branch refs/heads/main\n\n"
+
 	gitClient := &fakeGitClient{
-		output: "worktree C:/repo\nHEAD abcdef\nbranch refs/heads/main\n",
+		output: raw,
 	}
 
 	cmd := NewRootCmd(Dependencies{
@@ -161,11 +180,125 @@ func TestListCommand_WritesGitOutput(t *testing.T) {
 	if gitClient.calls != 1 {
 		t.Fatalf("expected WorktreeListPorcelain to be called once, got %d", gitClient.calls)
 	}
-	if stdout.String() != gitClient.output {
-		t.Fatalf("unexpected stdout:\nwant:\n%s\ngot:\n%s", gitClient.output, stdout.String())
+	lines := strings.Split(strings.TrimRight(stdout.String(), "\n"), "\n")
+	if len(lines) < 3 {
+		t.Fatalf("expected header + rows, got:\n%s", stdout.String())
+	}
+	if !strings.HasPrefix(lines[0], "   BRANCH") {
+		t.Fatalf("unexpected table header: %s", lines[0])
+	}
+	if !strings.HasPrefix(lines[1], "*  ") || !strings.Contains(lines[1], "main") {
+		t.Fatalf("expected current worktree to be first row, got: %s", lines[1])
+	}
+	if !strings.Contains(lines[2], "aaa") {
+		t.Fatalf("expected secondary row branch `aaa`, got: %s", lines[2])
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("unexpected stderr output: %s", stderr.String())
+	}
+}
+
+func TestListCommand_RawFormatWritesGitOutput(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	gitClient := &fakeGitClient{
+		output: "worktree C:/repo\nHEAD abcdef\nbranch refs/heads/main\n",
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout: &stdout,
+		Stderr: &stderr,
+		Git:    gitClient,
+	})
+	cmd.SetArgs([]string{"list", "--format", "raw"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if stdout.String() != gitClient.output {
+		t.Fatalf("unexpected stdout:\nwant:\n%s\ngot:\n%s", gitClient.output, stdout.String())
+	}
+}
+
+func TestListCommand_JSONFormatWritesRows(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	activePath := t.TempDir()
+	missingPath := filepath.Join(t.TempDir(), "missing")
+	stalePath := filepath.Join(t.TempDir(), "stale")
+	gitClient := &fakeGitClient{
+		output: "worktree " + strings.ReplaceAll(activePath, "\\", "/") + "\n" +
+			"HEAD 1111111111111111111111111111111111111111\n" +
+			"branch refs/heads/main\n\n" +
+			"worktree " + strings.ReplaceAll(missingPath, "\\", "/") + "\n" +
+			"HEAD 2222222222222222222222222222222222222222\n" +
+			"branch refs/heads/feature/missing\n\n" +
+			"worktree " + strings.ReplaceAll(stalePath, "\\", "/") + "\n" +
+			"HEAD 3333333333333333333333333333333333333333\n" +
+			"branch refs/heads/feature/stale\n" +
+			"prunable gitdir file points to non-existent location\n\n",
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout: &stdout,
+		Stderr: &stderr,
+		Git:    gitClient,
+	})
+	cmd.SetArgs([]string{"list", "--format", "json"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	var rows []listRow
+	if err := json.Unmarshal(stdout.Bytes(), &rows); err != nil {
+		t.Fatalf("json.Unmarshal() returned error: %v\noutput:\n%s", err, stdout.String())
+	}
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+
+	rowByPath := make(map[string]listRow, len(rows))
+	for _, row := range rows {
+		rowByPath[row.Path] = row
+	}
+
+	activeRow, ok := rowByPath[strings.ReplaceAll(activePath, "\\", "/")]
+	if !ok {
+		t.Fatalf("active row not found in output: %v", rowByPath)
+	}
+	if activeRow.Status != config.ListStatusActive {
+		t.Fatalf("unexpected active status: %q", activeRow.Status)
+	}
+	if activeRow.Head != "1111111111111111111111111111111111111111" {
+		t.Fatalf("unexpected active head: %q", activeRow.Head)
+	}
+	if activeRow.Branch != "main" {
+		t.Fatalf("unexpected active branch: %q", activeRow.Branch)
+	}
+
+	missingRow, ok := rowByPath[strings.ReplaceAll(missingPath, "\\", "/")]
+	if !ok {
+		t.Fatalf("missing row not found in output: %v", rowByPath)
+	}
+	if missingRow.Status != config.ListStatusMissing {
+		t.Fatalf("unexpected missing status: %q", missingRow.Status)
+	}
+
+	staleRow, ok := rowByPath[strings.ReplaceAll(stalePath, "\\", "/")]
+	if !ok {
+		t.Fatalf("stale row not found in output: %v", rowByPath)
+	}
+	if staleRow.Status != config.ListStatusStale {
+		t.Fatalf("unexpected stale status: %q", staleRow.Status)
+	}
+	if !staleRow.Prunable {
+		t.Fatalf("expected stale row prunable=true")
 	}
 }
 
@@ -193,5 +326,30 @@ func TestListCommand_ReturnsGitError(t *testing.T) {
 	}
 	if stdout.Len() != 0 {
 		t.Fatalf("expected no stdout output, got: %s", stdout.String())
+	}
+}
+
+func TestListCommand_ReturnsErrorForInvalidFormat(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	gitClient := &fakeGitClient{
+		output: "worktree C:/repo\nHEAD abcdef\nbranch refs/heads/main\n",
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout: &stdout,
+		Stderr: &stderr,
+		Git:    gitClient,
+	})
+	cmd.SetArgs([]string{"list", "--format", "invalid"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected Execute() to return error")
+	}
+	if !strings.Contains(err.Error(), "invalid --format value") {
+		t.Fatalf("unexpected error message: %v", err)
 	}
 }
