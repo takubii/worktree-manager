@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -57,6 +58,7 @@ func TestOpenCommand_OpensSelectedWorktree(t *testing.T) {
 		Stdout:   &stdout,
 		Stderr:   &stderr,
 		Git:      gitClient,
+		LookPath: newTestLookPath(map[string]bool{"code": true}),
 		Selector: selector,
 		Opener:   openExec,
 	})
@@ -169,6 +171,72 @@ func TestOpenCommand_ReturnsErrorWhenNoWorktreeExists(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "no worktrees found") {
 		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
+func TestOpenCommand_ReturnsErrorWhenExplicitVSCodeIsUnavailable(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	gitClient := &fakeGitClient{
+		output: "worktree C:/repo\nHEAD abc\nbranch refs/heads/main\n\n",
+	}
+	selector := &fakeSelector{index: 0}
+	openExec := &fakeOpener{}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &stdout,
+		Stderr:   &stderr,
+		Git:      gitClient,
+		LookPath: newTestLookPath(map[string]bool{}),
+		Selector: selector,
+		Opener:   openExec,
+	})
+	cmd.SetArgs([]string{"open", "--open", "vscode"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected Execute() to return error")
+	}
+	if !strings.Contains(err.Error(), "`--open vscode` was requested but `code` command was not found") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if openExec.call != 0 {
+		t.Fatalf("opener should not be called, got %d", openExec.call)
+	}
+}
+
+func TestOpenCommand_ReturnsErrorWhenExplicitCursorIsUnavailable(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	gitClient := &fakeGitClient{
+		output: "worktree C:/repo\nHEAD abc\nbranch refs/heads/main\n\n",
+	}
+	selector := &fakeSelector{index: 0}
+	openExec := &fakeOpener{}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &stdout,
+		Stderr:   &stderr,
+		Git:      gitClient,
+		LookPath: newTestLookPath(map[string]bool{}),
+		Selector: selector,
+		Opener:   openExec,
+	})
+	cmd.SetArgs([]string{"open", "--open", "cursor"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected Execute() to return error")
+	}
+	if !strings.Contains(err.Error(), "`--open cursor` was requested but `cursor` command was not found") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if openExec.call != 0 {
+		t.Fatalf("opener should not be called, got %d", openExec.call)
 	}
 }
 
@@ -380,5 +448,14 @@ func TestOpenCommand_FlagsOverrideConfigDefaults(t *testing.T) {
 	}
 	if openExec.window != openerpkg.WindowNew {
 		t.Fatalf("unexpected window mode: %q", openExec.window)
+	}
+}
+
+func newTestLookPath(available map[string]bool) func(file string) (string, error) {
+	return func(file string) (string, error) {
+		if available[file] {
+			return file, nil
+		}
+		return "", fmt.Errorf("%s not found", file)
 	}
 }

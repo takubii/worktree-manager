@@ -15,7 +15,6 @@ import (
 )
 
 const (
-	defaultRemoteName = config.DefaultRemote
 	defaultBaseBranch = config.DefaultBaseBranch
 )
 
@@ -51,6 +50,9 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 			resolvedOpener := strings.TrimSpace(openerName)
 			if !cmd.Flags().Changed("open") {
 				resolvedOpener = cfg.Open.Default
+			}
+			if err := validateExplicitOpenerAvailability(cmd, deps.LookPath, resolvedOpener); err != nil {
+				return err
 			}
 
 			windowMode, err := opener.ParseWindowMode(cfg.Open.Window)
@@ -138,9 +140,9 @@ func resolveTargetBranch(
 	localBranches []string,
 	remoteBranches []string,
 ) (string, string, error) {
-	branchArg = normalizeBranchForRemote(branchArg, remoteName)
+	branchArg = normalizeBranch(branchArg)
 
-	localSet := asBranchSet(localBranches, remoteName)
+	localSet := asBranchSet(localBranches)
 	remoteSet := asRemoteBranchSet(remoteBranches, remoteName)
 
 	if branchArg == "" {
@@ -156,7 +158,7 @@ func resolveTargetBranch(
 				return "", "", err
 			}
 
-			branchArg = normalizeBranchForRemote(result.Value, remoteName)
+			branchArg = normalizeBranch(result.Value)
 			if branchArg == "" {
 				return "", "", fmt.Errorf("branch name is empty. Enter a branch name and retry")
 			}
@@ -181,16 +183,16 @@ func resolveTargetBranch(
 	if _, ok := localSet[branchArg]; ok {
 		return branchArg, "", nil
 	}
-	if _, ok := remoteSet[branchArg]; ok {
-		return branchArg, remoteName + "/" + branchArg, nil
+	if remoteBranch, ok := findRemoteBranchKey(branchArg, remoteName, remoteSet); ok {
+		return branchArg, remoteName + "/" + remoteBranch, nil
 	}
 
-	baseBranch = normalizeBranchForRemote(baseBranch, remoteName)
+	baseBranch = normalizeBranch(baseBranch)
 	if _, ok := localSet[baseBranch]; ok {
 		return branchArg, baseBranch, nil
 	}
-	if _, ok := remoteSet[baseBranch]; ok {
-		return branchArg, remoteName + "/" + baseBranch, nil
+	if remoteBaseBranch, ok := findRemoteBranchKey(baseBranch, remoteName, remoteSet); ok {
+		return branchArg, remoteName + "/" + remoteBaseBranch, nil
 	}
 
 	return branchArg, baseBranch, nil
@@ -213,29 +215,48 @@ func ensureWorktreePathAvailable(path string) error {
 }
 
 func normalizeBranch(branch string) string {
-	return normalizeBranchForRemote(branch, defaultRemoteName)
-}
-
-func normalizeBranchForRemote(branch string, remote string) string {
 	branch = strings.TrimSpace(branch)
-	branch = strings.TrimPrefix(branch, "refs/heads/")
-	remote = strings.TrimSpace(remote)
-	if remote != "" {
-		return strings.TrimPrefix(branch, remote+"/")
-	}
-	return branch
+	return strings.TrimPrefix(branch, "refs/heads/")
 }
 
-func asBranchSet(branches []string, remote string) map[string]struct{} {
+func asBranchSet(branches []string) map[string]struct{} {
 	set := make(map[string]struct{}, len(branches))
 	for _, branch := range branches {
-		normalized := normalizeBranchForRemote(branch, remote)
+		normalized := normalizeBranch(branch)
 		if normalized == "" {
 			continue
 		}
 		set[normalized] = struct{}{}
 	}
 	return set
+}
+
+func findRemoteBranchKey(branch string, remote string, remoteSet map[string]struct{}) (string, bool) {
+	branch = normalizeBranch(branch)
+	if branch == "" {
+		return "", false
+	}
+
+	if _, ok := remoteSet[branch]; ok {
+		return branch, true
+	}
+
+	remote = strings.TrimSpace(remote)
+	if remote == "" {
+		return "", false
+	}
+
+	prefixed := remote + "/"
+	if !strings.HasPrefix(branch, prefixed) {
+		return "", false
+	}
+
+	trimmed := strings.TrimPrefix(branch, prefixed)
+	if _, ok := remoteSet[trimmed]; ok {
+		return trimmed, true
+	}
+
+	return "", false
 }
 
 func asRemoteBranchSet(remoteBranches []string, remote string) map[string]struct{} {
@@ -261,7 +282,7 @@ func branchCandidates(localBranches []string, remoteBranches []string, remote st
 	seen := make(map[string]struct{}, len(localBranches)+len(remoteBranches))
 
 	for _, branch := range localBranches {
-		normalized := normalizeBranchForRemote(branch, remote)
+		normalized := normalizeBranch(branch)
 		if normalized == "" {
 			continue
 		}

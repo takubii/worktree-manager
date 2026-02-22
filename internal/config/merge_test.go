@@ -32,3 +32,15 @@ func TestRenderWorktreeDir_ReturnsErrorForUnknownPlaceholder(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestRenderWorktreeDir_ReturnsErrorForPlaceholderWithHyphen(t *testing.T) {
+	t.Parallel()
+
+	_, err := RenderWorktreeDir("{repoRoot}/worktrees/{repo-parent}", "/repo/project", "feature/x")
+	if err == nil {
+		t.Fatal("expected RenderWorktreeDir() to return error")
+	}
+	if !strings.Contains(err.Error(), "not supported") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

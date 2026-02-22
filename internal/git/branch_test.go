@@ -132,6 +132,28 @@ func TestExecClientCheckBranchName_RunsExpectedCommand(t *testing.T) {
 	}
 }
 
+func TestExecClientCheckBranchName_PreservesRemotePrefixedBranch(t *testing.T) {
+	t.Parallel()
+
+	var gotArgs []string
+	client := newExecClient(func(ctx context.Context, _ string, args ...string) *exec.Cmd {
+		gotArgs = append([]string(nil), args...)
+
+		cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=TestHelperProcess", "--")
+		cmd.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1")
+		return cmd
+	})
+
+	if err := client.CheckBranchName(context.Background(), "origin/feature/x"); err != nil {
+		t.Fatalf("CheckBranchName() returned error: %v", err)
+	}
+
+	expectedArgs := []string{"check-ref-format", "--branch", "origin/feature/x"}
+	if !reflect.DeepEqual(gotArgs, expectedArgs) {
+		t.Fatalf("unexpected args: want=%v got=%v", expectedArgs, gotArgs)
+	}
+}
+
 func TestExecClientCheckBranchName_ValidatesEmptyInput(t *testing.T) {
 	t.Parallel()
 
@@ -197,6 +219,32 @@ func TestExecClientWorktreeAdd_RunsExpectedArgsWithStartPoint(t *testing.T) {
 	}
 
 	expectedArgs := []string{"worktree", "add", "-b", "feature/y", "/tmp/worktrees/feature/y", "origin/feature/y"}
+	if !reflect.DeepEqual(gotArgs, expectedArgs) {
+		t.Fatalf("unexpected args: want=%v got=%v", expectedArgs, gotArgs)
+	}
+}
+
+func TestExecClientWorktreeAdd_PreservesRemotePrefixedBranchName(t *testing.T) {
+	t.Parallel()
+
+	var gotArgs []string
+	client := newExecClient(func(ctx context.Context, _ string, args ...string) *exec.Cmd {
+		gotArgs = append([]string(nil), args...)
+
+		cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=TestHelperProcess", "--")
+		cmd.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1")
+		return cmd
+	})
+
+	err := client.WorktreeAdd(context.Background(), WorktreeAddParams{
+		Path:   "/tmp/worktrees/origin-feature-x",
+		Branch: "origin/feature/x",
+	})
+	if err != nil {
+		t.Fatalf("WorktreeAdd() returned error: %v", err)
+	}
+
+	expectedArgs := []string{"worktree", "add", "/tmp/worktrees/origin-feature-x", "origin/feature/x"}
 	if !reflect.DeepEqual(gotArgs, expectedArgs) {
 		t.Fatalf("unexpected args: want=%v got=%v", expectedArgs, gotArgs)
 	}
@@ -324,7 +372,7 @@ func TestExecClientDeleteLocalBranch_RunsForceDelete(t *testing.T) {
 		t.Fatalf("DeleteLocalBranch() returned error: %v", err)
 	}
 
-	expectedArgs := []string{"branch", "-D", "feature/x"}
+	expectedArgs := []string{"branch", "-D", "origin/feature/x"}
 	if !reflect.DeepEqual(gotArgs, expectedArgs) {
 		t.Fatalf("unexpected args: want=%v got=%v", expectedArgs, gotArgs)
 	}

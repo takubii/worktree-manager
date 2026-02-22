@@ -9,7 +9,7 @@ import (
 	"github.com/takubii/git-worktree-opener/internal/opener"
 )
 
-var placeholderPattern = regexp.MustCompile(`\{([a-zA-Z0-9]+)\}`)
+var placeholderPattern = regexp.MustCompile(`\{([^{}]+)\}`)
 
 type configOverride struct {
 	Remote              *string

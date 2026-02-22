@@ -34,6 +34,7 @@ func TestNewCommand_CreatesWorktreeFromLocalBranch(t *testing.T) {
 		Stdout:   &stdout,
 		Stderr:   &stderr,
 		Git:      gitClient,
+		LookPath: newTestLookPath(map[string]bool{"code": true}),
 		Selector: selector,
 		Opener:   openExec,
 	})
@@ -112,6 +113,109 @@ func TestNewCommand_UsesRemoteBranchAsStartPoint(t *testing.T) {
 		t.Fatalf("expected one WorktreeAdd call, got %d", len(gitClient.worktreeAddCalls))
 	}
 	if got := gitClient.worktreeAddCalls[0].StartPoint; got != "origin/feature/remote" {
+		t.Fatalf("unexpected start point: %q", got)
+	}
+}
+
+func TestNewCommand_ReturnsErrorWhenExplicitVSCodeIsUnavailable(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := createTestRepoRoot(t)
+	gitClient := &fakeGitClient{
+		repoRoot:       repoRoot,
+		localBranches:  []string{"main", "feature/local"},
+		remoteBranches: []string{"origin/main"},
+	}
+	openExec := &fakeOpener{}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		LookPath: newTestLookPath(map[string]bool{}),
+		Selector: &fakeSelector{index: 0},
+		Opener:   openExec,
+	})
+	cmd.SetArgs([]string{"new", "feature/local", "--open", "vscode"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected Execute() to return error")
+	}
+	if !strings.Contains(err.Error(), "`--open vscode` was requested but `code` command was not found") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if openExec.call != 0 {
+		t.Fatalf("opener should not be called, got %d", openExec.call)
+	}
+}
+
+func TestNewCommand_PreservesLocalBranchWithRemotePrefix(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := createTestRepoRoot(t)
+	gitClient := &fakeGitClient{
+		repoRoot:       repoRoot,
+		localBranches:  []string{"main", "origin/feature-demo"},
+		remoteBranches: []string{"origin/main"},
+	}
+	openExec := &fakeOpener{}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   openExec,
+	})
+	cmd.SetArgs([]string{"new", "origin/feature-demo"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if len(gitClient.worktreeAddCalls) != 1 {
+		t.Fatalf("expected one WorktreeAdd call, got %d", len(gitClient.worktreeAddCalls))
+	}
+	if got := gitClient.worktreeAddCalls[0].Branch; got != "origin/feature-demo" {
+		t.Fatalf("unexpected branch: %q", got)
+	}
+	if got := gitClient.worktreeAddCalls[0].StartPoint; got != "" {
+		t.Fatalf("unexpected start point: %q", got)
+	}
+}
+
+func TestNewCommand_ResolvesRemoteBranchWithRemotePrefixedName(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := createTestRepoRoot(t)
+	gitClient := &fakeGitClient{
+		repoRoot:       repoRoot,
+		localBranches:  []string{"main"},
+		remoteBranches: []string{"origin/main", "origin/origin/feature-demo"},
+	}
+	openExec := &fakeOpener{}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   openExec,
+	})
+	cmd.SetArgs([]string{"new", "origin/feature-demo"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if len(gitClient.worktreeAddCalls) != 1 {
+		t.Fatalf("expected one WorktreeAdd call, got %d", len(gitClient.worktreeAddCalls))
+	}
+	if got := gitClient.worktreeAddCalls[0].Branch; got != "origin/feature-demo" {
+		t.Fatalf("unexpected branch: %q", got)
+	}
+	if got := gitClient.worktreeAddCalls[0].StartPoint; got != "origin/origin/feature-demo" {
 		t.Fatalf("unexpected start point: %q", got)
 	}
 }

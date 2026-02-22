@@ -88,6 +88,8 @@ go run ./cmd/wto open --open vim
 go run ./cmd/wto open --open system
 ```
 
+When `--open vscode` or `--open cursor` is explicitly specified, `wto` requires the corresponding CLI command (`code` or `cursor`) to exist. If not found, the command returns an error instead of silently falling back.
+
 Choose window behavior:
 
 ```sh

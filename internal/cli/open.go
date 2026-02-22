@@ -32,6 +32,10 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 				windowModeRaw = cfg.Open.Window
 			}
 
+			if err := validateExplicitOpenerAvailability(cmd, deps.LookPath, openerName); err != nil {
+				return err
+			}
+
 			windowMode, err := opener.ParseWindowMode(windowModeRaw)
 			if err != nil {
 				return err

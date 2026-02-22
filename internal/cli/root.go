@@ -3,6 +3,7 @@ package cli
 import (
 	"io"
 	"os"
+	"os/exec"
 
 	"github.com/spf13/cobra"
 	"github.com/takubii/git-worktree-opener/internal/config"
@@ -15,6 +16,7 @@ import (
 type Dependencies struct {
 	Stdout   io.Writer
 	Stderr   io.Writer
+	LookPath func(file string) (string, error)
 	Git      git.Client
 	Opener   opener.Opener
 	Selector selector.Selector
@@ -49,6 +51,9 @@ func withDefaults(deps Dependencies) Dependencies {
 	}
 	if deps.Stderr == nil {
 		deps.Stderr = os.Stderr
+	}
+	if deps.LookPath == nil {
+		deps.LookPath = exec.LookPath
 	}
 	if deps.Git == nil {
 		deps.Git = git.NewClient()

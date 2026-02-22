@@ -160,8 +160,5 @@ func parseBranchLines(raw string) []string {
 
 func normalizeBranchName(branch string) string {
 	branch = strings.TrimSpace(branch)
-	if strings.HasPrefix(branch, "refs/heads/") {
-		return strings.TrimPrefix(branch, "refs/heads/")
-	}
-	return strings.TrimPrefix(branch, "origin/")
+	return strings.TrimPrefix(branch, "refs/heads/")
 }

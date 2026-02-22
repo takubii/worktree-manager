@@ -84,6 +84,40 @@ func TestRmCommand_FindsWorktreeByBranchArgument(t *testing.T) {
 	}
 }
 
+func TestRmCommand_PreservesBranchArgumentWithRemotePrefix(t *testing.T) {
+	t.Parallel()
+
+	gitClient := &fakeGitClient{
+		output: "worktree C:/worktrees/origin-feature-demo\nHEAD def\nbranch refs/heads/origin/feature-demo\n\n",
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+	})
+	cmd.SetArgs([]string{"rm", "origin/feature-demo"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if len(gitClient.worktreeRemove) != 1 {
+		t.Fatalf("expected one WorktreeRemove call, got %d", len(gitClient.worktreeRemove))
+	}
+	if got := gitClient.worktreeRemove[0].path; got != "C:/worktrees/origin-feature-demo" {
+		t.Fatalf("unexpected worktree remove path: %q", got)
+	}
+	if len(gitClient.deleteBranchCalls) != 1 {
+		t.Fatalf("expected one DeleteLocalBranch call, got %d", len(gitClient.deleteBranchCalls))
+	}
+	if got := gitClient.deleteBranchCalls[0].branch; got != "origin/feature-demo" {
+		t.Fatalf("unexpected branch deleted: %q", got)
+	}
+}
+
 func TestRmCommand_ForceAlsoForcesBranchDeletionWhenPolicyNotExplicit(t *testing.T) {
 	t.Parallel()
 
