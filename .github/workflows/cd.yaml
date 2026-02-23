@@ -1,0 +1,241 @@
+name: CD
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (required when mode=release)"
+        required: false
+        type: string
+      mode:
+        description: "Execution mode"
+        required: true
+        default: snapshot
+        type: choice
+        options:
+          - snapshot
+          - release
+      prerelease:
+        description: "Mark release as prerelease (release mode only)"
+        required: true
+        default: false
+        type: boolean
+      draft:
+        description: "Create release as draft (release mode only)"
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: cd-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  preflight:
+    name: Preflight (lint + test + guardrails)
+    runs-on: ubuntu-latest
+    outputs:
+      mode: ${{ steps.meta.outputs.mode }}
+      tag: ${{ steps.meta.outputs.tag }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+      draft: ${{ steps.meta.outputs.draft }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.10.1
+          args: --timeout=5m
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Resolve execution metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mode="snapshot"
+          tag=""
+          prerelease="false"
+          draft="true"
+
+          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            mode="release"
+            tag="${GITHUB_REF_NAME}"
+          else
+            mode="${{ github.event.inputs.mode }}"
+            tag="${{ github.event.inputs.tag }}"
+            prerelease="${{ github.event.inputs.prerelease }}"
+            draft="${{ github.event.inputs.draft }}"
+
+            [[ -z "$mode" ]] && mode="snapshot"
+            [[ -z "$prerelease" ]] && prerelease="false"
+            [[ -z "$draft" ]] && draft="true"
+          fi
+
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "draft=$draft" >> "$GITHUB_OUTPUT"
+
+      - name: Validate release tag format
+        if: ${{ steps.meta.outputs.mode == 'release' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ steps.meta.outputs.tag }}"
+          if [[ -z "$tag" ]]; then
+            echo "release mode requires a tag"
+            exit 1
+          fi
+          if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "invalid release tag format: $tag"
+            echo "expected format: vMAJOR.MINOR.PATCH[-PRERELEASE]"
+            exit 1
+          fi
+
+      - name: Validate release tag is on main
+        if: ${{ steps.meta.outputs.mode == 'release' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag="${{ steps.meta.outputs.tag }}"
+          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            tag_commit="${GITHUB_SHA}"
+          else
+            git fetch --tags origin
+            tag_commit="$(git rev-list -n 1 "refs/tags/${tag}" 2>/dev/null || true)"
+            if [[ -z "$tag_commit" ]]; then
+              echo "could not resolve commit for tag: $tag"
+              echo "create and push the tag before running release mode"
+              exit 1
+            fi
+          fi
+
+          git fetch origin main --depth=1
+          if ! git merge-base --is-ancestor "$tag_commit" "origin/main"; then
+            echo "tag commit is not contained in origin/main"
+            echo "tag: $tag"
+            echo "commit: $tag_commit"
+            exit 1
+          fi
+
+  release:
+    name: Release (GoReleaser)
+    needs: preflight
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tag ref
+        if: ${{ needs.preflight.outputs.mode == 'release' }}
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: refs/tags/${{ needs.preflight.outputs.tag }}
+
+      - name: Checkout current ref (snapshot)
+        if: ${{ needs.preflight.outputs.mode == 'snapshot' }}
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Resolve GoReleaser args
+        id: goreleaser_args
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ needs.preflight.outputs.mode }}" == "release" ]]; then
+            echo "value=release --clean" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=release --snapshot --clean --skip=publish" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: ${{ steps.goreleaser_args.outputs.value }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ github.event_name == 'workflow_dispatch' && needs.preflight.outputs.mode == 'release' && needs.preflight.outputs.tag || '' }}
+
+      - name: Apply manual release flags (workflow_dispatch only)
+        if: ${{ github.event_name == 'workflow_dispatch' && needs.preflight.outputs.mode == 'release' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release edit "${{ needs.preflight.outputs.tag }}" \
+            --draft=${{ needs.preflight.outputs.draft }} \
+            --prerelease=${{ needs.preflight.outputs.prerelease }}
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: goreleaser-dist
+          path: dist
+          if-no-files-found: error
+
+  post-check:
+    name: Post-check artifacts
+    needs: release
+    if: ${{ needs.release.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: goreleaser-dist
+          path: dist
+
+      - name: Validate checksums and archive count
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ ! -f dist/checksums.txt ]]; then
+            echo "dist/checksums.txt was not generated"
+            exit 1
+          fi
+
+          archive_count="$(find dist -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.zip' \) | wc -l | tr -d ' ')"
+          if [[ "${archive_count}" -lt 6 ]]; then
+            echo "expected at least 6 archives, found ${archive_count}"
+            find dist -maxdepth 1 -type f -print
+            exit 1
+          fi
+
+          checksum_lines="$(wc -l < dist/checksums.txt | tr -d ' ')"
+          if [[ "${checksum_lines}" -lt "${archive_count}" ]]; then
+            echo "checksums.txt contains fewer entries than archives"
+            echo "archives=${archive_count}, checksum_lines=${checksum_lines}"
+            exit 1
+          fi
+
+          echo "artifact post-check passed"

@@ -22,6 +22,43 @@ git worktree list --porcelain
 
 and renders a readable table by default.
 
+## Releases
+
+Prebuilt binaries are published on GitHub Releases:
+
+- https://github.com/takubii/git-worktree-opener/releases
+
+Release assets include:
+
+- OS/arch archives (`tar.gz` for Linux/macOS, `zip` for Windows)
+- `checksums.txt` (SHA256)
+
+Quick example (Linux amd64):
+
+```sh
+VERSION=v0.1.0
+curl -LO "https://github.com/takubii/git-worktree-opener/releases/download/${VERSION}/git-worktree-opener_${VERSION}_linux_amd64.tar.gz"
+tar -xzf "git-worktree-opener_${VERSION}_linux_amd64.tar.gz"
+./wto --help
+```
+
+Verify checksums:
+
+```sh
+# Linux
+sha256sum --check checksums.txt
+
+# macOS
+shasum -a 256 -c checksums.txt
+```
+
+```powershell
+# Windows (PowerShell)
+Get-FileHash .\wto.exe -Algorithm SHA256
+```
+
+Install scripts (`curl | sh`, `iwr | iex`) are planned for v0.1.1 or later.
+
 ## Usage
 
 Show help:

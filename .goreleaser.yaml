@@ -1,0 +1,63 @@
+version: 2
+
+project_name: git-worktree-opener
+dist: dist
+
+builds:
+  - id: wto
+    main: ./cmd/wto
+    binary: wto
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: default
+    ids:
+      - wto
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "git-worktree-opener_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+changelog:
+  use: git
+  sort: asc
+  filters:
+    exclude:
+      - "^Merge"
+      - "^docs\\(agents\\):"
+      - "^chore\\(agents\\):"
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]/-]+\))?!?:.+$'
+      order: 0
+    - title: Bug Fixes
+      regexp: '^.*?fix(\([[:word:]/-]+\))?!?:.+$'
+      order: 1
+    - title: Documentation
+      regexp: '^.*?docs(\([[:word:]/-]+\))?!?:.+$'
+      order: 2
+    - title: Maintenance
+      regexp: '^.*?(refactor|perf|test|build|ci|chore)(\([[:word:]/-]+\))?!?:.+$'
+      order: 3
+    - title: Others
+      order: 999
+
+release:
+  draft: true
+  prerelease: auto
+  replace_existing_draft: true
