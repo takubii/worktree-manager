@@ -115,6 +115,9 @@ func TestNewCommand_UsesRemoteBranchAsStartPoint(t *testing.T) {
 	if got := gitClient.worktreeAddCalls[0].StartPoint; got != "origin/feature/remote" {
 		t.Fatalf("unexpected start point: %q", got)
 	}
+	if openExec.call != 0 {
+		t.Fatalf("opener should not be called by default, got %d", openExec.call)
+	}
 }
 
 func TestNewCommand_ReturnsErrorWhenExplicitVSCodeIsUnavailable(t *testing.T) {
@@ -463,7 +466,7 @@ func TestNewCommand_DoesNotValidateExistingBranchSelection(t *testing.T) {
 	}
 }
 
-func TestNewCommand_UsesConfigDefaultsWhenFlagsAreNotProvided(t *testing.T) {
+func TestNewCommand_DoesNotOpenByDefaultWhenFlagsAreNotProvided(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := createTestRepoRoot(t)
@@ -519,11 +522,8 @@ func TestNewCommand_UsesConfigDefaultsWhenFlagsAreNotProvided(t *testing.T) {
 	if got := filepath.Clean(gitClient.worktreeAddCalls[0].Path); got != expectedPath {
 		t.Fatalf("unexpected worktree path: want=%q got=%q", expectedPath, got)
 	}
-	if openExec.kind != "cursor" {
-		t.Fatalf("unexpected opener kind: %q", openExec.kind)
-	}
-	if openExec.window != openerpkg.WindowReuse {
-		t.Fatalf("unexpected window mode: %q", openExec.window)
+	if openExec.call != 0 {
+		t.Fatalf("opener should not be called by default, got %d", openExec.call)
 	}
 }
 

@@ -16,6 +16,7 @@ import (
 
 const (
 	defaultBaseBranch = config.DefaultBaseBranch
+	newOpenNone       = "none"
 )
 
 func newNewCmd(deps Dependencies) *cobra.Command {
@@ -24,7 +25,7 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "new [branch]",
-		Short: "Create and open a new worktree",
+		Short: "Create a new worktree",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := deps.Git.WorktreePrune(cmd.Context()); err != nil {
@@ -47,17 +48,11 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 				return fmt.Errorf("base branch is empty. Set --base or `baseBranch` in config to a valid branch and retry")
 			}
 
-			resolvedOpener := strings.TrimSpace(openerName)
-			if !cmd.Flags().Changed("open") {
-				resolvedOpener = cfg.Open.Default
-			}
-			if err := validateExplicitOpenerAvailability(cmd, deps.LookPath, resolvedOpener); err != nil {
-				return err
-			}
-
-			windowMode, err := opener.ParseWindowMode(cfg.Open.Window)
-			if err != nil {
-				return fmt.Errorf("invalid config open.window value: %w", err)
+			resolvedOpener := strings.ToLower(strings.TrimSpace(openerName))
+			if resolvedOpener != newOpenNone {
+				if err := validateExplicitOpenerAvailability(cmd, deps.LookPath, resolvedOpener); err != nil {
+					return err
+				}
 			}
 
 			targetBranch := ""
@@ -117,8 +112,15 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 				return err
 			}
 
-			if err := deps.Opener.Open(cmd.Context(), resolvedOpener, worktreePath, windowMode); err != nil {
-				return err
+			if resolvedOpener != newOpenNone {
+				windowMode, err := opener.ParseWindowMode(cfg.Open.Window)
+				if err != nil {
+					return fmt.Errorf("invalid config open.window value: %w", err)
+				}
+
+				if err := deps.Opener.Open(cmd.Context(), resolvedOpener, worktreePath, windowMode); err != nil {
+					return err
+				}
 			}
 
 			return nil
@@ -126,7 +128,7 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&baseBranch, "base", defaultBaseBranch, "base branch used when creating a new branch")
-	cmd.Flags().StringVar(&openerName, "open", config.DefaultOpenKind, "opener to use: "+config.SupportedOpenKindsText)
+	cmd.Flags().StringVar(&openerName, "open", newOpenNone, "opener to use after creation: none|"+config.SupportedOpenKindsText)
 
 	return cmd
 }

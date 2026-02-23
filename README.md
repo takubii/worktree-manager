@@ -83,6 +83,7 @@ wto list
 ```sh
 wto new
 wto new feature/my-task
+wto new feature/my-task --open system
 ```
 
 3. Open an existing worktree:
@@ -135,12 +136,12 @@ Default behavior:
 - Runs `git worktree prune --expire now`, then `git fetch origin --prune`
 - Uses `main` as base when creating a new branch
 - Creates worktrees under `<repo-parent>/worktrees/<branch>`
-- Opens the new worktree with `system` in a new window
+- Does not open the created worktree unless `--open` is explicitly set
 
 Main options:
 
 - `--base <branch>`
-- `--open system|vscode|cursor|vim`
+- `--open none|system|vscode|cursor|vim`
 
 ### `wto open`
 
@@ -216,6 +217,11 @@ Config precedence:
 ```text
 flag > repo (.wtoconfig.json) > global (config.json) > built-in defaults
 ```
+
+Note:
+
+- `open.default` is used by `wto open`
+- `wto new` does not auto-open unless you set `--open`
 
 Config file locations:
 
