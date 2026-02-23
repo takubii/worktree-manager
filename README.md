@@ -1,48 +1,57 @@
 # git-worktree-opener
 
-`git-worktree-opener` is a CLI tool whose binary name is `wto`.
+`wto` is a CLI tool to create, list, open, and remove Git worktrees quickly.
 
-## Current status
+## Install
 
-Implemented commands:
-
-- `wto --help`
-- `wto list`
-- `wto new`
-- `wto open`
-- `wto rm`
-- `wto config init`
-- `wto config show`
-
-`wto list` executes:
-
-```text
-git worktree list --porcelain
-```
-
-and renders a readable table by default.
-
-## Releases
-
-Prebuilt binaries are published on GitHub Releases:
+Download prebuilt binaries from GitHub Releases:
 
 - https://github.com/takubii/git-worktree-opener/releases
 
-Release assets include:
+### Quick install scripts
 
-- OS/arch archives (`tar.gz` for Linux/macOS, `zip` for Windows)
-- `checksums.txt` (SHA256)
+Linux/macOS:
 
-Quick example (Linux amd64):
+```sh
+curl -fsSL https://raw.githubusercontent.com/takubii/git-worktree-opener/main/scripts/install.sh | sh
+```
+
+Windows (PowerShell):
+
+```powershell
+iwr https://raw.githubusercontent.com/takubii/git-worktree-opener/main/scripts/install.ps1 -UseBasicParsing | iex
+```
+
+Install script options:
+
+- `WTO_VERSION=v0.1.0` installs a specific release tag
+- `WTO_INSTALL_DIR=<path>` changes installation directory
+- `WTO_SKIP_CHECKSUM=1` skips SHA256 verification
+
+### Manual install
+
+Release assets include OS/arch archives (`tar.gz` for Linux/macOS, `zip` for Windows) and `checksums.txt` (SHA256).
+
+Linux/macOS manual example:
 
 ```sh
 VERSION=v0.1.0
 curl -LO "https://github.com/takubii/git-worktree-opener/releases/download/${VERSION}/git-worktree-opener_${VERSION}_linux_amd64.tar.gz"
 tar -xzf "git-worktree-opener_${VERSION}_linux_amd64.tar.gz"
+chmod +x wto
 ./wto --help
 ```
 
-Verify checksums:
+Windows (PowerShell) example:
+
+```powershell
+$Version = "v0.1.0"
+Invoke-WebRequest -Uri "https://github.com/takubii/git-worktree-opener/releases/download/$Version/git-worktree-opener_${Version}_windows_amd64.zip" -OutFile "wto.zip"
+Expand-Archive -Path ".\wto.zip" -DestinationPath "."
+.\wto.exe --help
+```
+
+Checksum verification:
 
 ```sh
 # Linux
@@ -57,124 +66,150 @@ shasum -a 256 -c checksums.txt
 Get-FileHash .\wto.exe -Algorithm SHA256
 ```
 
-Install scripts (`curl | sh`, `iwr | iex`) are planned for v0.1.1 or later.
+`checksums.txt` is provided so you can verify the downloaded archive before installation.
 
-## Usage
+## Quickstart
 
-Show help:
+Run commands inside a Git repository.
 
-```sh
-go run ./cmd/wto --help
-```
-
-List worktrees in the current repository:
+1. List worktrees:
 
 ```sh
-go run ./cmd/wto list
-go run ./cmd/wto list --format table
-go run ./cmd/wto list --format raw
-go run ./cmd/wto list --format json
+wto list
 ```
 
-`wto list` format behavior:
-
-- default (`table`): `<marker> | BRANCH | STATUS | HEAD | PATH`
-- `raw`: original `git worktree list --porcelain` output (backward-compatible)
-- `json`: machine-readable array output
-
-`<marker>` header is intentionally blank and shows `*` for the current working tree row.
-
-`STATUS` values:
-
-- `active`: normal entry and path exists
-- `stale`: marked as `prunable` by Git
-- `missing`: not prunable, but local path does not exist
-
-Create a new worktree:
+2. Create a worktree:
 
 ```sh
-go run ./cmd/wto new
-go run ./cmd/wto new feature/my-task
-go run ./cmd/wto new feature/my-task --base main --open vscode
+wto new
+wto new feature/my-task
 ```
 
-By default, `wto new` runs `git worktree prune --expire now`, then `git fetch origin --prune`, uses `main` as the base when creating a new branch, creates the worktree under `<repo-parent>/worktrees/<branch>`, and opens it with the `system` opener in a new window.
-
-When running `wto new` without a branch argument:
-
-- with `fzf`, you can type a branch name and press Enter to create it if no existing branch is selected
-- with `promptui`, choose `Create a new branch` and enter the branch name
-- the entered name is validated with `git check-ref-format --branch`
-
-Select and open an existing worktree (uses `fzf` if installed, otherwise `promptui`, and finally numeric selection when interactive UI is unavailable):
+3. Open an existing worktree:
 
 ```sh
-go run ./cmd/wto open
+wto open
 ```
 
-By default, `wto open` prefers opening in a new window where supported.
-
-Before listing candidates, `wto open` runs `git worktree prune --expire now` and skips entries marked as `prunable` (stale metadata).
-
-Choose opener explicitly:
+4. Remove a worktree:
 
 ```sh
-go run ./cmd/wto open --open vscode
-go run ./cmd/wto open --open cursor
-go run ./cmd/wto open --open vim
-go run ./cmd/wto open --open system
+wto rm
+wto rm feature/my-task
 ```
 
-When `--open vscode` or `--open cursor` is explicitly specified, `wto` requires the corresponding CLI command (`code` or `cursor`) to exist. If not found, the command returns an error instead of silently falling back.
+## Command Reference
 
-Choose window behavior:
+### `wto list`
+
+Examples:
 
 ```sh
-go run ./cmd/wto open --window new
-go run ./cmd/wto open --window reuse
+wto list
+wto list --format table
+wto list --format raw
+wto list --format json
 ```
 
-Current note: `--window` is applied to `system`, `vscode`, and `cursor`. `vim` currently uses best-effort behavior.
+Default behavior:
 
-Remove an existing worktree:
+- Runs `git worktree list --porcelain`
+- Renders a readable table by default (`--format table`)
+
+Main option:
+
+- `--format table|raw|json`
+
+### `wto new`
+
+Examples:
 
 ```sh
-go run ./cmd/wto rm
-go run ./cmd/wto rm feature/my-task
-go run ./cmd/wto rm feature/my-task --delete-branch none
-go run ./cmd/wto rm feature/my-task --force
+wto new
+wto new feature/my-task
+wto new feature/my-task --base main --open vscode
 ```
 
-By default, `wto rm` removes the selected worktree and then safely deletes the local branch with `git branch -d`.
+Default behavior:
 
-`wto rm` refuses to remove a worktree when your current directory is inside that target worktree. Move to another directory and retry.
+- Runs `git worktree prune --expire now`, then `git fetch origin --prune`
+- Uses `main` as base when creating a new branch
+- Creates worktrees under `<repo-parent>/worktrees/<branch>`
+- Opens the new worktree with `system` in a new window
 
-`wto rm` also shows stale entries (marked `prunable`) in selection as `[stale]`.
-When a stale entry is selected, it is cleaned up via `git worktree prune --expire now`.
-Selection rows use suffix status labels:
+Main options:
 
-- `<branch>\t<path>\t[active]`
-- `<branch>\t<path>\t[stale]`
+- `--base <branch>`
+- `--open system|vscode|cursor|vim`
 
-- `--delete-branch none` skips branch deletion
-- `--delete-branch safe` uses `git branch -d`
-- `--delete-branch force` uses `git branch -D`
-- `--force` forces `git worktree remove` and, when `--delete-branch` is not explicitly set, also switches branch deletion to force
+### `wto open`
 
-Initialize global config:
+Examples:
 
 ```sh
-go run ./cmd/wto config init
-go run ./cmd/wto config init --force
+wto open
+wto open --open vscode
+wto open --open cursor
+wto open --open vim
+wto open --window reuse
 ```
 
-Show effective config (merged defaults + global + repo override):
+Default behavior:
+
+- Runs `git worktree prune --expire now` before listing candidates
+- Skips stale (`prunable`) entries
+- Opens selected worktree using `system` opener
+- Prefers opening in a new window
+
+Main options:
+
+- `--open system|vscode|cursor|vim`
+- `--window new|reuse`
+
+Note:
+
+- `--window` currently applies to `system`, `vscode`, and `cursor`
+- `vim` currently uses best-effort behavior
+- If `--open vscode` or `--open cursor` is explicitly set, missing CLI (`code` / `cursor`) returns an error (no silent fallback)
+
+### `wto rm`
+
+Examples:
 
 ```sh
-go run ./cmd/wto config show
+wto rm
+wto rm feature/my-task
+wto rm feature/my-task --delete-branch none
+wto rm feature/my-task --force
 ```
 
-Config is optional. If no config files exist, `wto` keeps using built-in defaults (0-config behavior).
+Default behavior:
+
+- Removes the selected worktree
+- Safely deletes the local branch with `git branch -d`
+
+Main options:
+
+- `--delete-branch none|safe|force`
+- `--force`
+
+### `wto config`
+
+Examples:
+
+```sh
+wto config init
+wto config init --force
+wto config show
+```
+
+Default behavior:
+
+- Config is optional (0-config works)
+- `config init` creates global config file
+- `config show` prints effective config as JSON
+
+## Configuration
 
 Config precedence:
 
@@ -187,7 +222,7 @@ Config file locations:
 - Global: `<os.UserConfigDir()>/git-worktree-opener/config.json`
 - Repo override: `<repo-root>/.wtoconfig.json`
 
-Supported config keys:
+Supported keys:
 
 ```json
 {
@@ -212,19 +247,64 @@ Supported config keys:
 
 If global/repo config is invalid (unknown keys or invalid values), `wto` prints a warning to `stderr` and continues with lower-priority values.
 
-## Error example
+## Advanced Behavior
 
-If you run `wto list` outside a Git repository, the command exits with non-zero status and prints guidance to `stderr`.
+### `wto list` output formats
 
-```sh
-cd <repo-root>
-go build -o ./wto ./cmd/wto
+- `table` (default): marker, branch, status, short head, path
+- `raw`: original `git worktree list --porcelain` output
+- `json`: machine-readable array
 
-cd <non-git-directory>
-<repo-root>/wto list
-echo $?
-```
+`STATUS` values:
 
-Move to a Git repository directory and run the command again.
+- `active`: entry is healthy and path exists
+- `stale`: entry is marked `prunable`
+- `missing`: path does not exist locally and is not marked `prunable`
 
-On Windows `cmd.exe`, use `wto.exe` and `echo %ERRORLEVEL%`.
+### Branch selection in `wto new`
+
+When `wto new` runs without a branch argument:
+
+- Uses `fzf` if installed
+- Otherwise uses `promptui`
+- Falls back to numeric selection if interactive UI is unavailable
+
+You can create a new branch from the selector flow:
+
+- `fzf`: type a new branch name and press Enter
+- `promptui`: choose `Create a new branch` and enter a name
+
+Entered names are validated with `git check-ref-format --branch`.
+
+### Worktree removal behavior
+
+- Selection shows stale entries with `[stale]`
+- Selecting a stale entry cleans metadata via `git worktree prune --expire now`
+- If `--force` is set and `--delete-branch` is not explicitly set, branch deletion mode also becomes force
+- `wto rm` refuses removal if your current directory is inside the target worktree
+
+## Troubleshooting
+
+### `wto list` fails outside a Git repository
+
+Run the command inside a Git repository directory.
+
+### `--open vscode` or `--open cursor` fails
+
+Install the corresponding CLI command and ensure it is on `PATH`:
+
+- VS Code: `code`
+- Cursor: `cursor`
+
+Or use `--open system`.
+
+### `wto rm` refuses to remove
+
+This happens when your current directory is inside the target worktree.
+Move to another directory (for example, the repo root), then run `wto rm` again.
+
+## For Maintainers
+
+Release operation steps are documented in:
+
+- `docs/RELEASING.md`
