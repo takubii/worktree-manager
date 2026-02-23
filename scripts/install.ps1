@@ -64,6 +64,69 @@ function Resolve-ExpectedChecksum {
   return $Matches.hash.ToLowerInvariant()
 }
 
+function Normalize-PathEntry {
+  param([Parameter(Mandatory = $true)][string]$PathEntry)
+
+  $trimmed = $PathEntry.Trim()
+  if ([string]::IsNullOrWhiteSpace($trimmed)) {
+    return ""
+  }
+
+  try {
+    return [System.IO.Path]::GetFullPath($trimmed).TrimEnd("\").ToLowerInvariant()
+  } catch {
+    return $trimmed.TrimEnd("\").ToLowerInvariant()
+  }
+}
+
+function Split-PathEntries {
+  param([Parameter(Mandatory = $false)][string]$PathValue)
+
+  if ([string]::IsNullOrWhiteSpace($PathValue)) {
+    return @()
+  }
+
+  return @($PathValue -split ";" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+}
+
+function Contains-PathEntry {
+  param(
+    [Parameter(Mandatory = $false)][string]$PathValue,
+    [Parameter(Mandatory = $true)][string]$Candidate
+  )
+
+  $normalizedCandidate = Normalize-PathEntry -PathEntry $Candidate
+  if ([string]::IsNullOrWhiteSpace($normalizedCandidate)) {
+    return $false
+  }
+
+  foreach ($entry in Split-PathEntries -PathValue $PathValue) {
+    if ((Normalize-PathEntry -PathEntry $entry) -eq $normalizedCandidate) {
+      return $true
+    }
+  }
+
+  return $false
+}
+
+function Append-PathEntry {
+  param(
+    [Parameter(Mandatory = $false)][string]$PathValue,
+    [Parameter(Mandatory = $true)][string]$Entry
+  )
+
+  if ([string]::IsNullOrWhiteSpace($PathValue)) {
+    return $Entry
+  }
+
+  $trimmed = $PathValue.TrimEnd(";")
+  if ([string]::IsNullOrWhiteSpace($trimmed)) {
+    return $Entry
+  }
+
+  return "$trimmed;$Entry"
+}
+
 $arch = Resolve-Arch
 $release = Resolve-Release -RequestedVersion $version
 $version = [string]$release.tag_name
@@ -121,13 +184,28 @@ try {
   New-Item -ItemType Directory -Path $installDir -Force | Out-Null
   Copy-Item -Path $binary.FullName -Destination (Join-Path $installDir $binaryName) -Force
 
+  $installDir = [System.IO.Path]::GetFullPath($installDir)
+
   Write-Host "Installed $binaryName $version to $installDir"
 
-  $pathEntries = @($env:Path -split ";") | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
-  $inPath = $pathEntries | Where-Object { $_.TrimEnd("\") -ieq $installDir.TrimEnd("\") }
-  if (-not $inPath) {
-    Write-Host "Add this directory to PATH to run wto from any terminal:"
-    Write-Host "  $installDir"
+  if (-not (Contains-PathEntry -PathValue $env:Path -Candidate $installDir)) {
+    $env:Path = Append-PathEntry -PathValue $env:Path -Entry $installDir
+  }
+
+  $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+  if (-not (Contains-PathEntry -PathValue $userPath -Candidate $installDir)) {
+    $updatedUserPath = Append-PathEntry -PathValue $userPath -Entry $installDir
+    [Environment]::SetEnvironmentVariable("Path", $updatedUserPath, "User")
+    Write-Host "Added $installDir to User PATH."
+  }
+
+  $wtoCommand = Get-Command "wto" -ErrorAction SilentlyContinue
+  if ($null -ne $wtoCommand) {
+    Write-Host "wto is ready in this terminal."
+  } else {
+    Write-Host "wto command is not available yet in this terminal."
+    Write-Host "Run directly once: $installDir\\wto.exe --help"
+    Write-Host "If needed, open a new terminal and run: wto --help"
   }
 } finally {
   Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue

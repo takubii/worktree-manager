@@ -28,6 +28,11 @@ Install script options:
 - `WTO_INSTALL_DIR=<path>` changes installation directory
 - `WTO_SKIP_CHECKSUM=1` skips SHA256 verification
 
+PowerShell install script behavior:
+
+- Adds install directory to the current session `PATH`
+- Adds install directory to User `PATH` if missing
+
 ### Manual install
 
 Release assets include OS/arch archives (`tar.gz` for Linux/macOS, `zip` for Windows) and `checksums.txt` (SHA256).
