@@ -27,7 +27,7 @@ archives:
       - goos: windows
         formats:
           - zip
-    name_template: "git-worktree-opener_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    name_template: "git-worktree-opener_{{ if .Tag }}{{ .Tag }}{{ else }}{{ .Version }}{{ end }}_{{ .Os }}_{{ .Arch }}"
 
 checksum:
   name_template: checksums.txt

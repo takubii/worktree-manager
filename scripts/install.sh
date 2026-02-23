@@ -60,29 +60,88 @@ download_file() {
 
   if command -v curl >/dev/null 2>&1; then
     curl -fsSL "$url" -o "$dest"
-    return
+    return 0
   fi
 
   if command -v wget >/dev/null 2>&1; then
     wget -qO "$dest" "$url"
-    return
+    return 0
   fi
 
   echo "curl or wget is required to download release assets" >&2
   exit 1
 }
 
-resolve_latest_version() {
-  api_url="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest"
-  response_file="$1"
-  download_file "$api_url" "$response_file"
+resolve_release_json() {
+  output_file="$1"
+  if [ -z "$VERSION" ]; then
+    api_url="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest"
+  else
+    api_url="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/tags/${VERSION}"
+  fi
+  download_file "$api_url" "$output_file"
+}
 
-  latest="$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$response_file" | head -n 1)"
-  if [ -z "$latest" ]; then
-    echo "failed to resolve latest release version from GitHub API" >&2
+extract_tag_name() {
+  json_file="$1"
+  tag_name="$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$json_file" | head -n 1)"
+  if [ -z "$tag_name" ]; then
+    echo "failed to resolve release tag from GitHub API response" >&2
     exit 1
   fi
-  printf '%s' "$latest"
+  printf '%s' "$tag_name"
+}
+
+select_asset_urls() {
+  json_file="$1"
+  os="$2"
+  arch="$3"
+
+  archive_url=""
+  checksums_url=""
+
+  urls="$(sed -n 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$json_file")"
+  if [ -z "$urls" ]; then
+    echo "failed to find release assets in GitHub API response" >&2
+    exit 1
+  fi
+
+  echo "$urls" | while IFS= read -r url; do
+    case "$url" in
+      */git-worktree-opener_*_"${os}_${arch}.tar.gz")
+        echo "archive=$url"
+        ;;
+      */checksums.txt)
+        echo "checksums=$url"
+        ;;
+    esac
+  done
+}
+
+resolve_asset_urls() {
+  json_file="$1"
+  os="$2"
+  arch="$3"
+
+  archive_url=""
+  checksums_url=""
+
+  selected="$(select_asset_urls "$json_file" "$os" "$arch")"
+  if [ -n "$selected" ]; then
+    archive_url="$(echo "$selected" | sed -n 's/^archive=//p' | head -n 1)"
+    checksums_url="$(echo "$selected" | sed -n 's/^checksums=//p' | head -n 1)"
+  fi
+
+  if [ -z "$archive_url" ]; then
+    echo "could not find release archive for ${os}/${arch}" >&2
+    exit 1
+  fi
+  if [ -z "$checksums_url" ]; then
+    echo "could not find checksums.txt in release assets" >&2
+    exit 1
+  fi
+
+  printf '%s\n%s\n' "$archive_url" "$checksums_url"
 }
 
 detect_os() {
@@ -113,27 +172,29 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-if [ -z "$VERSION" ]; then
-  VERSION="$(resolve_latest_version "$tmp_dir/latest-release.json")"
-fi
-
 os="$(detect_os)"
 arch="$(detect_arch)"
-archive="git-worktree-opener_${VERSION}_${os}_${arch}.tar.gz"
-archive_url="https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/${VERSION}/${archive}"
-checksums_url="https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/${VERSION}/checksums.txt"
 
-archive_path="$tmp_dir/$archive"
+release_json="$tmp_dir/release.json"
+resolve_release_json "$release_json"
+VERSION="$(extract_tag_name "$release_json")"
+
+asset_urls="$(resolve_asset_urls "$release_json" "$os" "$arch")"
+archive_url="$(printf '%s\n' "$asset_urls" | sed -n '1p')"
+checksums_url="$(printf '%s\n' "$asset_urls" | sed -n '2p')"
+archive_name="$(basename "$archive_url")"
+
+archive_path="$tmp_dir/$archive_name"
 checksums_path="$tmp_dir/checksums.txt"
 
-echo "Downloading $archive ..."
+echo "Downloading $archive_name ..."
 download_file "$archive_url" "$archive_path"
 download_file "$checksums_url" "$checksums_path"
 
 if [ "$SKIP_CHECKSUM" != "1" ]; then
-  expected="$(awk -v target="$archive" '$2 == target { print $1 }' "$checksums_path" | head -n 1)"
+  expected="$(awk -v target="$archive_name" '$2 == target { print $1 }' "$checksums_path" | head -n 1)"
   if [ -z "$expected" ]; then
-    echo "failed to find checksum entry for $archive" >&2
+    echo "failed to find checksum entry for $archive_name" >&2
     exit 1
   fi
 
@@ -147,7 +208,7 @@ if [ "$SKIP_CHECKSUM" != "1" ]; then
   fi
 
   if [ "$actual" != "$expected" ]; then
-    echo "checksum mismatch for $archive" >&2
+    echo "checksum mismatch for $archive_name" >&2
     exit 1
   fi
 fi

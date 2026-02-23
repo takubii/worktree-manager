@@ -17,13 +17,24 @@ if ([string]::IsNullOrWhiteSpace($installDir)) {
 
 $skipChecksum = ($env:WTO_SKIP_CHECKSUM -eq "1")
 
-function Resolve-LatestVersion {
+function Resolve-Release {
+  param(
+    [Parameter(Mandatory = $false)][string]$RequestedVersion
+  )
+
   $apiUrl = "https://api.github.com/repos/$repoOwner/$repoName/releases/latest"
-  $release = Invoke-RestMethod -Uri $apiUrl
-  if ([string]::IsNullOrWhiteSpace($release.tag_name)) {
-    throw "Failed to resolve latest release version from GitHub API."
+  if (-not [string]::IsNullOrWhiteSpace($RequestedVersion)) {
+    $apiUrl = "https://api.github.com/repos/$repoOwner/$repoName/releases/tags/$RequestedVersion"
   }
-  return [string]$release.tag_name
+
+  try {
+    return Invoke-RestMethod -Uri $apiUrl
+  } catch {
+    if ([string]::IsNullOrWhiteSpace($RequestedVersion)) {
+      throw "Failed to resolve latest release metadata from GitHub API."
+    }
+    throw "Failed to resolve release metadata for tag '$RequestedVersion'. Confirm the tag exists and retry."
+  }
 }
 
 function Resolve-Arch {
@@ -53,14 +64,33 @@ function Resolve-ExpectedChecksum {
   return $Matches.hash.ToLowerInvariant()
 }
 
+$arch = Resolve-Arch
+$release = Resolve-Release -RequestedVersion $version
+$version = [string]$release.tag_name
 if ([string]::IsNullOrWhiteSpace($version)) {
-  $version = Resolve-LatestVersion
+  throw "Release metadata does not include tag_name."
 }
 
-$arch = Resolve-Arch
-$archiveName = "git-worktree-opener_${version}_windows_${arch}.zip"
-$archiveUrl = "https://github.com/$repoOwner/$repoName/releases/download/$version/$archiveName"
-$checksumsUrl = "https://github.com/$repoOwner/$repoName/releases/download/$version/checksums.txt"
+$archivePattern = "^git-worktree-opener_.+_windows_${arch}\.zip$"
+$archiveAsset = $release.assets | Where-Object { $_.name -match $archivePattern } | Select-Object -First 1
+if ($null -eq $archiveAsset) {
+  throw "No Windows archive asset found for architecture '$arch'."
+}
+
+$checksumsAsset = $release.assets | Where-Object { $_.name -eq "checksums.txt" } | Select-Object -First 1
+if ($null -eq $checksumsAsset) {
+  throw "checksums.txt asset was not found in the selected release."
+}
+
+$archiveName = [string]$archiveAsset.name
+$archiveUrl = [string]$archiveAsset.browser_download_url
+$checksumsUrl = [string]$checksumsAsset.browser_download_url
+if ([string]::IsNullOrWhiteSpace($archiveUrl)) {
+  throw "Archive download URL is missing in release metadata."
+}
+if ([string]::IsNullOrWhiteSpace($checksumsUrl)) {
+  throw "Checksums download URL is missing in release metadata."
+}
 
 $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("wto-install-" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $tempDir | Out-Null
