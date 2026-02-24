@@ -104,6 +104,13 @@ wto rm
 wto rm feature/my-task
 ```
 
+5. Update `wto`:
+
+```sh
+wto update
+wto update --version v0.1.0
+```
+
 ## Command Reference
 
 ### `wto list`
@@ -214,6 +221,24 @@ Default behavior:
 - Config is optional (0-config works)
 - `config init` creates global config file
 - `config show` prints effective config as JSON
+
+### `wto update`
+
+Examples:
+
+```sh
+wto update
+wto update --version v0.1.0
+```
+
+Default behavior:
+
+- Re-runs the official install script and installs the latest release
+- On Windows, starts the updater in background to avoid self-overwrite issues
+
+Main option:
+
+- `--version <tag>`
 
 ## Configuration
 

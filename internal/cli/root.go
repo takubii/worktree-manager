@@ -10,6 +10,7 @@ import (
 	"github.com/takubii/git-worktree-opener/internal/git"
 	"github.com/takubii/git-worktree-opener/internal/opener"
 	"github.com/takubii/git-worktree-opener/internal/selector"
+	"github.com/takubii/git-worktree-opener/internal/updater"
 )
 
 // Dependencies holds external dependencies for command execution.
@@ -21,6 +22,7 @@ type Dependencies struct {
 	Opener   opener.Opener
 	Selector selector.Selector
 	Config   config.Provider
+	Updater  updater.Service
 }
 
 // NewRootCmd creates the root command for wto.
@@ -41,6 +43,7 @@ func NewRootCmd(deps Dependencies) *cobra.Command {
 	cmd.AddCommand(newNewCmd(deps))
 	cmd.AddCommand(newRmCmd(deps))
 	cmd.AddCommand(newConfigCmd(deps))
+	cmd.AddCommand(newUpdateCmd(deps))
 
 	return cmd
 }
@@ -66,6 +69,9 @@ func withDefaults(deps Dependencies) Dependencies {
 	}
 	if deps.Config == nil {
 		deps.Config = config.NewStaticProvider(config.DefaultConfig())
+	}
+	if deps.Updater == nil {
+		deps.Updater = updater.NewInstaller()
 	}
 	return deps
 }
