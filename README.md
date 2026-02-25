@@ -171,6 +171,8 @@ Examples:
 ```sh
 wto open
 wto open --branch feature/my-task
+wto open --print-cd
+wto open --after "echo {path}"
 wto open --open vscode
 wto open --open cursor
 wto open --open vim
@@ -180,13 +182,15 @@ wto open --window reuse
 Default behavior:
 
 - Runs `git worktree prune --expire now` before listing candidates
-- Skips stale (`prunable`) entries
+- Skips stale (`prunable`) and missing local-path entries
 - Opens selected worktree using `system` opener
 - Prefers opening in a new window
 
 Main options:
 
 - `--branch <branch>`
+- `--print-cd`
+- `--after "<command>"`
 - `--open system|vscode|cursor|vim`
 - `--window new|reuse`
 
@@ -194,6 +198,8 @@ Note:
 
 - `--branch` opens the worktree linked to that local branch without showing the selector
 - If the branch does not have a linked active worktree, `wto open --branch` returns an actionable error
+- `--print-cd` prints shell navigation hints for the selected worktree path
+- `--after` runs a follow-up command after open (`{path}` is replaced with the selected path)
 - `--window` currently applies to `system`, `vscode`, and `cursor`
 - `vim` currently uses best-effort behavior
 - If `--open vscode` or `--open cursor` is explicitly set, missing CLI (`code` / `cursor`) returns an error (no silent fallback)
