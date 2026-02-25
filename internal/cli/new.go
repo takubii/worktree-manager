@@ -22,14 +22,18 @@ const (
 func newNewCmd(deps Dependencies) *cobra.Command {
 	var baseBranch string
 	var openerName string
+	var noFetch bool
+	var noPrune bool
 
 	cmd := &cobra.Command{
 		Use:   "new [branch]",
 		Short: "Create a new worktree",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := deps.Git.WorktreePrune(cmd.Context()); err != nil {
-				return err
+			if !noPrune {
+				if err := deps.Git.WorktreePrune(cmd.Context()); err != nil {
+					return err
+				}
 			}
 
 			cfg := deps.Config.Load(cmd.Context())
@@ -60,8 +64,10 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 				targetBranch = args[0]
 			}
 
-			if err := deps.Git.FetchPrune(cmd.Context(), remoteName); err != nil {
-				return err
+			if !noFetch {
+				if err := deps.Git.FetchPrune(cmd.Context(), remoteName); err != nil {
+					return err
+				}
 			}
 
 			repoRoot, err := deps.Git.RepoRoot(cmd.Context())
@@ -129,6 +135,8 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 
 	cmd.Flags().StringVar(&baseBranch, "base", defaultBaseBranch, "base branch used when creating a new branch")
 	cmd.Flags().StringVar(&openerName, "open", newOpenNone, "opener to use after creation: none|"+config.SupportedOpenKindsText)
+	cmd.Flags().BoolVar(&noFetch, "no-fetch", false, "skip running git fetch <remote> --prune before branch resolution")
+	cmd.Flags().BoolVar(&noPrune, "no-prune", false, "skip running git worktree prune --expire now before processing")
 
 	return cmd
 }

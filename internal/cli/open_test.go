@@ -104,6 +104,37 @@ func TestOpenCommand_OpensSelectedWorktree(t *testing.T) {
 	}
 }
 
+func TestOpenCommand_SkipsPruneWhenNoPruneIsSet(t *testing.T) {
+	t.Parallel()
+
+	repoPath := toPosixPathForOpen(t.TempDir())
+	gitClient := &fakeGitClient{
+		output: "worktree " + repoPath + "\nHEAD abc\nbranch refs/heads/main\n\n",
+	}
+	selector := &fakeSelector{index: 0}
+	openExec := &fakeOpener{}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: selector,
+		Opener:   openExec,
+	})
+	cmd.SetArgs([]string{"open", "--no-prune"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if gitClient.worktreePruneCall != 0 {
+		t.Fatalf("expected WorktreePrune not to be called, got %d", gitClient.worktreePruneCall)
+	}
+	if openExec.call != 1 {
+		t.Fatalf("expected opener to be called once, got %d", openExec.call)
+	}
+}
+
 func TestOpenCommand_OpensWorktreeByBranch(t *testing.T) {
 	t.Parallel()
 

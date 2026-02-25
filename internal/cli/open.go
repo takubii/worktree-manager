@@ -17,14 +17,17 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 	var targetBranch string
 	var printCD bool
 	var afterCommand string
+	var noPrune bool
 
 	cmd := &cobra.Command{
 		Use:   "open",
 		Short: "Select and open an existing worktree",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if err := deps.Git.WorktreePrune(cmd.Context()); err != nil {
-				return err
+			if !noPrune {
+				if err := deps.Git.WorktreePrune(cmd.Context()); err != nil {
+					return err
+				}
 			}
 
 			cfg := deps.Config.Load(cmd.Context())
@@ -95,6 +98,7 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 	cmd.Flags().StringVar(&targetBranch, "branch", "", "open worktree linked to this local branch")
 	cmd.Flags().BoolVar(&printCD, "print-cd", false, "print cd command hints for the opened worktree")
 	cmd.Flags().StringVar(&afterCommand, "after", "", "run a follow-up command after open (`{path}` is replaced with selected path)")
+	cmd.Flags().BoolVar(&noPrune, "no-prune", false, "skip running git worktree prune --expire now before listing candidates")
 	return cmd
 }
 

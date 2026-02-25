@@ -84,6 +84,68 @@ func TestNewCommand_CreatesWorktreeFromLocalBranch(t *testing.T) {
 	}
 }
 
+func TestNewCommand_SkipsPruneWhenNoPruneIsSet(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := createTestRepoRoot(t)
+	gitClient := &fakeGitClient{
+		repoRoot:       repoRoot,
+		localBranches:  []string{"main", "feature/local"},
+		remoteBranches: []string{"origin/main"},
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+	})
+	cmd.SetArgs([]string{"new", "feature/local", "--no-prune"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if gitClient.worktreePruneCall != 0 {
+		t.Fatalf("expected WorktreePrune not to be called, got %d", gitClient.worktreePruneCall)
+	}
+	if gitClient.fetchRemote != "origin" {
+		t.Fatalf("unexpected fetch remote: %q", gitClient.fetchRemote)
+	}
+}
+
+func TestNewCommand_SkipsFetchWhenNoFetchIsSet(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := createTestRepoRoot(t)
+	gitClient := &fakeGitClient{
+		repoRoot:       repoRoot,
+		localBranches:  []string{"main", "feature/local"},
+		remoteBranches: []string{"origin/main"},
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+	})
+	cmd.SetArgs([]string{"new", "feature/local", "--no-fetch"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if gitClient.fetchRemote != "" {
+		t.Fatalf("expected FetchPrune not to be called, got remote %q", gitClient.fetchRemote)
+	}
+	if gitClient.worktreePruneCall != 1 {
+		t.Fatalf("expected WorktreePrune to be called once, got %d", gitClient.worktreePruneCall)
+	}
+}
+
 func TestNewCommand_UsesRemoteBranchAsStartPoint(t *testing.T) {
 	t.Parallel()
 
