@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -13,6 +14,7 @@ import (
 func newOpenCmd(deps Dependencies) *cobra.Command {
 	var openerName string
 	var windowModeRaw string
+	var targetBranch string
 
 	cmd := &cobra.Command{
 		Use:   "open",
@@ -60,20 +62,10 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 				return fmt.Errorf("no valid worktrees found after pruning stale entries. Run `wto new` to create one, then retry")
 			}
 
-			options := make([]string, len(activeWorktrees))
-			for i, wt := range activeWorktrees {
-				options[i] = formatWorktreeOption(wt)
-			}
-
-			selectedIndex, err := deps.Selector.Select(cmd.Context(), "Select a worktree to open:", options)
+			selected, err := selectWorktreeForOpen(cmd, deps, activeWorktrees, targetBranch)
 			if err != nil {
 				return err
 			}
-			if selectedIndex < 0 || selectedIndex >= len(activeWorktrees) {
-				return fmt.Errorf("invalid worktree selection index: %d", selectedIndex)
-			}
-
-			selected := activeWorktrees[selectedIndex]
 			if err := deps.Opener.Open(cmd.Context(), openerName, selected.Path, windowMode); err != nil {
 				return err
 			}
@@ -84,7 +76,68 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 
 	cmd.Flags().StringVar(&openerName, "open", config.DefaultOpenKind, "opener to use: "+config.SupportedOpenKindsText)
 	cmd.Flags().StringVar(&windowModeRaw, "window", config.DefaultOpenWindow, "window behavior: "+config.SupportedWindowModesText)
+	cmd.Flags().StringVar(&targetBranch, "branch", "", "open worktree linked to this local branch")
 	return cmd
+}
+
+func selectWorktreeForOpen(cmd *cobra.Command, deps Dependencies, worktrees []git.Worktree, targetBranch string) (git.Worktree, error) {
+	targetBranch = normalizeBranch(targetBranch)
+	if targetBranch != "" {
+		return findWorktreeForOpenByBranch(worktrees, targetBranch)
+	}
+
+	options := make([]string, len(worktrees))
+	for i, wt := range worktrees {
+		options[i] = formatWorktreeOption(wt)
+	}
+
+	selectedIndex, err := deps.Selector.Select(cmd.Context(), "Select a worktree to open:", options)
+	if err != nil {
+		return git.Worktree{}, err
+	}
+	if selectedIndex < 0 || selectedIndex >= len(worktrees) {
+		return git.Worktree{}, fmt.Errorf("invalid worktree selection index: %d", selectedIndex)
+	}
+
+	return worktrees[selectedIndex], nil
+}
+
+func findWorktreeForOpenByBranch(worktrees []git.Worktree, targetBranch string) (git.Worktree, error) {
+	if targetBranch == "" {
+		return git.Worktree{}, fmt.Errorf("branch name is empty. Set `--branch <name>` and retry")
+	}
+
+	matches := make([]git.Worktree, 0, 1)
+	for _, wt := range worktrees {
+		branch, ok := worktreeLocalBranch(wt)
+		if !ok {
+			continue
+		}
+		if branch == targetBranch {
+			matches = append(matches, wt)
+		}
+	}
+
+	if len(matches) == 0 {
+		return git.Worktree{}, fmt.Errorf(
+			"branch %q does not have a linked active worktree. Run `wto new %s` to create one, or run `wto list` to inspect available worktrees, then retry",
+			targetBranch,
+			targetBranch,
+		)
+	}
+	if len(matches) > 1 {
+		return git.Worktree{}, fmt.Errorf("multiple worktrees matched branch %q. Run `wto open` without --branch and choose the exact path", targetBranch)
+	}
+
+	match := matches[0]
+	if _, err := os.Stat(match.Path); err != nil {
+		if os.IsNotExist(err) {
+			return git.Worktree{}, fmt.Errorf("worktree path for branch %q does not exist locally: %s. Run `wto list` to inspect entries and `wto rm` to clean stale entries, then retry", targetBranch, match.Path)
+		}
+		return git.Worktree{}, fmt.Errorf("failed to inspect worktree path %q for branch %q: %w", match.Path, targetBranch, err)
+	}
+
+	return match, nil
 }
 
 func formatWorktreeOption(wt git.Worktree) string {
