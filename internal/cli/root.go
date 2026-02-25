@@ -20,6 +20,7 @@ type Dependencies struct {
 	LookPath func(file string) (string, error)
 	Git      git.Client
 	Opener   opener.Opener
+	Enter    EnterRunner
 	Selector selector.Selector
 	Config   config.Provider
 	Updater  updater.Service
@@ -64,6 +65,9 @@ func withDefaults(deps Dependencies) Dependencies {
 	}
 	if deps.Opener == nil {
 		deps.Opener = opener.NewDefault()
+	}
+	if deps.Enter == nil {
+		deps.Enter = newDefaultEnterRunner()
 	}
 	if deps.Selector == nil {
 		deps.Selector = selector.NewDefault(os.Stdin, deps.Stderr)
