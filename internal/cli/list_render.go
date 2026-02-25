@@ -43,7 +43,7 @@ func buildListRows(worktrees []git.Worktree, cwd string) []listRow {
 	for _, wt := range worktrees {
 		rows = append(rows, listRow{
 			Current:  isPathWithinWorktree(cwd, wt.Path),
-			Branch:   normalizeBranchName(wt.Branch),
+			Branch:   normalizeBranch(wt.Branch),
 			Detached: wt.Detached,
 			Status:   resolveListStatus(wt),
 			Head:     wt.Head,
@@ -151,16 +151,12 @@ func padOrTruncate(value string, width int) string {
 	return value
 }
 
-func normalizeBranchName(branch string) string {
-	return strings.TrimPrefix(strings.TrimSpace(branch), "refs/heads/")
-}
-
 func displayListBranch(row listRow) string {
 	if row.Detached {
-		return "(detached)"
+		return branchLabelDetached
 	}
 	if row.Branch == "" {
-		return "-"
+		return branchLabelUnknown
 	}
 	return row.Branch
 }

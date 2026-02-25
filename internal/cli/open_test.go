@@ -297,7 +297,7 @@ func TestOpenCommand_ReturnsErrorWhenOnlyPrunableRemain(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected Execute() to return error")
 	}
-	if !strings.Contains(err.Error(), "no valid worktrees found after filtering stale/missing entries") {
+	if !strings.Contains(err.Error(), errNoValidWorktreesForOpen) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -324,7 +324,7 @@ func TestOpenCommand_ReturnsErrorWhenOnlyMissingRemain(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected Execute() to return error")
 	}
-	if !strings.Contains(err.Error(), "no valid worktrees found after filtering stale/missing entries") {
+	if !strings.Contains(err.Error(), errNoValidWorktreesForOpen) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

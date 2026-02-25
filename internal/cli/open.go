@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -10,6 +11,8 @@ import (
 	"github.com/takubii/git-worktree-opener/internal/git"
 	"github.com/takubii/git-worktree-opener/internal/opener"
 )
+
+const errNoValidWorktreesForOpen = "no valid worktrees found after filtering stale/missing entries. Run `wto list` to inspect current state, then retry"
 
 func newOpenCmd(deps Dependencies) *cobra.Command {
 	var openerName string
@@ -65,7 +68,7 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 			warnSkippedPrunableWorktrees(cmd.ErrOrStderr(), "wto open", prunable)
 			warnSkippedMissingWorktrees(cmd.ErrOrStderr(), "wto open", missing)
 			if len(activeWorktrees) == 0 {
-				return fmt.Errorf("no valid worktrees found after filtering stale/missing entries. Run `wto list` to inspect current state, then retry")
+				return errors.New(errNoValidWorktreesForOpen)
 			}
 
 			selected, err := selectWorktreeForOpen(cmd, deps, activeWorktrees, targetBranch)
@@ -163,9 +166,11 @@ func findWorktreeForOpenByBranch(worktrees []git.Worktree, targetBranch string) 
 }
 
 func formatWorktreeOption(wt git.Worktree) string {
-	state := "(detached)"
-	if !wt.Detached && wt.Branch != "" {
-		state = strings.TrimPrefix(wt.Branch, "refs/heads/")
+	state := branchLabelUnknown
+	if wt.Detached {
+		state = branchLabelDetached
+	} else if branch, ok := worktreeLocalBranch(wt); ok {
+		state = branch
 	}
 
 	return fmt.Sprintf("%s\t%s", state, wt.Path)

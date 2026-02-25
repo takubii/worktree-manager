@@ -141,9 +141,9 @@ func selectWorktreeForRemove(ctx context.Context, deps Dependencies, args []stri
 }
 
 func formatWorktreeOptionForRemove(wt git.Worktree) string {
-	status := "active"
+	status := config.ListStatusActive
 	if wt.Prunable {
-		status = "stale"
+		status = config.ListStatusStale
 	}
 
 	return fmt.Sprintf("%s\t[%s]", formatWorktreeOption(wt), status)

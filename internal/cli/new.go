@@ -224,11 +224,6 @@ func ensureWorktreePathAvailable(path string) error {
 	return fmt.Errorf("failed to inspect worktree path %q: %w", path, err)
 }
 
-func normalizeBranch(branch string) string {
-	branch = strings.TrimSpace(branch)
-	return strings.TrimPrefix(branch, "refs/heads/")
-}
-
 func asBranchSet(branches []string) map[string]struct{} {
 	set := make(map[string]struct{}, len(branches))
 	for _, branch := range branches {
