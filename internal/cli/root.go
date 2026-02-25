@@ -21,6 +21,7 @@ type Dependencies struct {
 	Git      git.Client
 	Opener   opener.Opener
 	Enter    EnterRunner
+	After    AfterRunner
 	Selector selector.Selector
 	Config   config.Provider
 	Updater  updater.Service
@@ -68,6 +69,9 @@ func withDefaults(deps Dependencies) Dependencies {
 	}
 	if deps.Enter == nil {
 		deps.Enter = newDefaultEnterRunner()
+	}
+	if deps.After == nil {
+		deps.After = newDefaultAfterRunner()
 	}
 	if deps.Selector == nil {
 		deps.Selector = selector.NewDefault(os.Stdin, deps.Stderr)

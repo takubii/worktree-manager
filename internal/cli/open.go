@@ -15,6 +15,8 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 	var openerName string
 	var windowModeRaw string
 	var targetBranch string
+	var printCD bool
+	var afterCommand string
 
 	cmd := &cobra.Command{
 		Use:   "open",
@@ -56,10 +58,11 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 				return fmt.Errorf("no worktrees found. Create one first, then run `wto open`")
 			}
 
-			activeWorktrees, prunable := splitPrunableWorktrees(worktrees)
+			activeWorktrees, prunable, missing := splitUnavailableWorktreesForOpen(worktrees)
 			warnSkippedPrunableWorktrees(cmd.ErrOrStderr(), "wto open", prunable)
+			warnSkippedMissingWorktrees(cmd.ErrOrStderr(), "wto open", missing)
 			if len(activeWorktrees) == 0 {
-				return fmt.Errorf("no valid worktrees found after pruning stale entries. Run `wto new` to create one, then retry")
+				return fmt.Errorf("no valid worktrees found after filtering stale/missing entries. Run `wto list` to inspect current state, then retry")
 			}
 
 			selected, err := selectWorktreeForOpen(cmd, deps, activeWorktrees, targetBranch)
@@ -69,6 +72,19 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 			if err := deps.Opener.Open(cmd.Context(), openerName, selected.Path, windowMode); err != nil {
 				return err
 			}
+			if strings.TrimSpace(afterCommand) != "" {
+				if err := deps.After.Run(cmd.Context(), afterCommand, selected.Path); err != nil {
+					return err
+				}
+			}
+			if printCD {
+				hints := deps.Enter.FormatCDHints(selected.Path)
+				for _, hint := range hints {
+					if _, err := fmt.Fprintln(cmd.OutOrStdout(), hint); err != nil {
+						return fmt.Errorf("failed to write cd hint output: %w", err)
+					}
+				}
+			}
 
 			return nil
 		},
@@ -77,6 +93,8 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 	cmd.Flags().StringVar(&openerName, "open", config.DefaultOpenKind, "opener to use: "+config.SupportedOpenKindsText)
 	cmd.Flags().StringVar(&windowModeRaw, "window", config.DefaultOpenWindow, "window behavior: "+config.SupportedWindowModesText)
 	cmd.Flags().StringVar(&targetBranch, "branch", "", "open worktree linked to this local branch")
+	cmd.Flags().BoolVar(&printCD, "print-cd", false, "print cd command hints for the opened worktree")
+	cmd.Flags().StringVar(&afterCommand, "after", "", "run a follow-up command after open (`{path}` is replaced with selected path)")
 	return cmd
 }
 
