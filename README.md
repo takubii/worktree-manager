@@ -154,7 +154,7 @@ wto new feature/my-task --base main --open vscode
 
 Default behavior:
 
-- Runs `git worktree prune --expire now`, then `git fetch origin --prune`
+- Runs `git worktree prune --expire now`, then `git fetch origin --prune` (unless skipped via flags)
 - Uses `main` as base when creating a new branch
 - Creates worktrees under `<repo-parent>/worktrees/<branch>`
 - Does not open the created worktree unless `--open` is explicitly set
@@ -163,6 +163,8 @@ Main options:
 
 - `--base <branch>`
 - `--open none|system|vscode|cursor|vim`
+- `--no-fetch`
+- `--no-prune`
 
 ### `wto open`
 
@@ -181,7 +183,7 @@ wto open --window reuse
 
 Default behavior:
 
-- Runs `git worktree prune --expire now` before listing candidates
+- Runs `git worktree prune --expire now` before listing candidates (unless `--no-prune` is set)
 - Skips stale (`prunable`) and missing local-path entries
 - Opens selected worktree using `system` opener
 - Prefers opening in a new window
@@ -191,6 +193,7 @@ Main options:
 - `--branch <branch>`
 - `--print-cd`
 - `--after "<command>"`
+- `--no-prune`
 - `--open system|vscode|cursor|vim`
 - `--window new|reuse`
 
