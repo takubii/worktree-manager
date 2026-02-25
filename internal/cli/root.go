@@ -43,6 +43,7 @@ func NewRootCmd(deps Dependencies) *cobra.Command {
 	cmd.AddCommand(newNewCmd(deps))
 	cmd.AddCommand(newRmCmd(deps))
 	cmd.AddCommand(newConfigCmd(deps))
+	cmd.AddCommand(newEnterCmd(deps))
 	cmd.AddCommand(newUpdateCmd(deps))
 
 	return cmd
