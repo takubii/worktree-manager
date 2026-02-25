@@ -8,6 +8,8 @@ Download prebuilt binaries from GitHub Releases:
 
 - https://github.com/takubii/git-worktree-opener/releases
 
+Homebrew / WinGet distribution is planned for a later release.
+
 ### Quick install scripts
 
 Linux/macOS:
@@ -120,6 +122,13 @@ wto update
 wto update --version v0.1.0
 ```
 
+7. Show current version:
+
+```sh
+wto version
+wto --version
+```
+
 ## Command Reference
 
 ### `wto list`
@@ -150,11 +159,13 @@ Examples:
 wto new
 wto new feature/my-task
 wto new feature/my-task --base main --open vscode
+wto new feature/my-task --output path
+wto new feature/my-task --output json
 ```
 
 Default behavior:
 
-- Runs `git worktree prune --expire now`, then `git fetch origin --prune` (unless skipped via flags)
+- Runs `git worktree prune --expire now`, then `git fetch origin --prune` (unless skipped via flags or config defaults)
 - Uses `main` as base when creating a new branch
 - Creates worktrees under `<repo-parent>/worktrees/<branch>`
 - Does not open the created worktree unless `--open` is explicitly set
@@ -165,6 +176,7 @@ Main options:
 - `--open none|system|vscode|cursor|vim`
 - `--no-fetch`
 - `--no-prune`
+- `--output none|path|json`
 
 ### `wto open`
 
@@ -175,6 +187,8 @@ wto open
 wto open --branch feature/my-task
 wto open --print-cd
 wto open --after "echo {path}"
+wto open --output path
+wto open --output json
 wto open --open vscode
 wto open --open cursor
 wto open --open vim
@@ -183,7 +197,7 @@ wto open --window reuse
 
 Default behavior:
 
-- Runs `git worktree prune --expire now` before listing candidates (unless `--no-prune` is set)
+- Runs `git worktree prune --expire now` before listing candidates (unless `--no-prune` is set or config default disables prune)
 - Skips stale (`prunable`) and missing local-path entries
 - Opens selected worktree using `system` opener
 - Prefers opening in a new window
@@ -194,6 +208,7 @@ Main options:
 - `--print-cd`
 - `--after "<command>"`
 - `--no-prune`
+- `--output none|path|json`
 - `--open system|vscode|cursor|vim`
 - `--window new|reuse`
 
@@ -202,6 +217,7 @@ Note:
 - `--branch` opens the worktree linked to that local branch without showing the selector
 - If the branch does not have a linked active worktree, `wto open --branch` returns an actionable error
 - `--print-cd` prints shell navigation hints for the selected worktree path
+- `--print-cd` cannot be combined with `--output`
 - `--after` runs a follow-up command after open (`{path}` is replaced with the selected path)
 - `--window` currently applies to `system`, `vscode`, and `cursor`
 - `vim` currently uses best-effort behavior
@@ -213,6 +229,7 @@ Examples:
 
 ```sh
 wto enter
+wto enter --branch feature/my-task
 wto enter --print-cd
 wto enter --shell
 ```
@@ -225,6 +242,7 @@ Default behavior:
 
 Main options:
 
+- `--branch <branch>` enters the linked worktree without interactive selection
 - `--print-cd` prints `cd` command hints for your shell
 - `--shell` starts a subshell in the selected worktree
 
@@ -240,6 +258,7 @@ Examples:
 ```sh
 wto rm
 wto rm feature/my-task
+wto rm feature/my-task --dry-run
 wto rm feature/my-task --delete-branch none
 wto rm feature/my-task --force
 ```
@@ -253,6 +272,7 @@ Main options:
 
 - `--delete-branch none|safe|force`
 - `--force`
+- `--dry-run`
 
 ### `wto config`
 
@@ -288,6 +308,19 @@ Main option:
 
 - `--version <tag>`
 
+### `wto version`
+
+Examples:
+
+```sh
+wto version
+wto --version
+```
+
+Default behavior:
+
+- Prints the current `wto` version
+
 ## Configuration
 
 Config precedence:
@@ -300,6 +333,8 @@ Note:
 
 - `open.default` is used by `wto open`
 - `wto new` does not auto-open unless you set `--open`
+- `new.fetch` / `new.prune` set defaults for `wto new` network/prune behavior
+- `open.prune` sets default prune behavior for `wto open`
 
 Config file locations:
 
@@ -313,9 +348,14 @@ Supported keys:
   "remote": "origin",
   "baseBranch": "main",
   "worktreeDirTemplate": "{repoParent}/worktrees/{branch}",
+  "new": {
+    "fetch": true,
+    "prune": true
+  },
   "open": {
     "default": "system",
-    "window": "new"
+    "window": "new",
+    "prune": true
   },
   "rm": {
     "deleteBranch": "safe"
