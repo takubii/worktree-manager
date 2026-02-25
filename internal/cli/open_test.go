@@ -88,6 +88,80 @@ func TestOpenCommand_OpensSelectedWorktree(t *testing.T) {
 	}
 }
 
+func TestOpenCommand_OpensWorktreeByBranch(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	mainPath := toPosixPathForOpen(t.TempDir())
+	featurePath := toPosixPathForOpen(t.TempDir())
+	gitClient := &fakeGitClient{
+		output: "worktree " + mainPath + "\nHEAD abc\nbranch refs/heads/main\n\n" +
+			"worktree " + featurePath + "\nHEAD def\nbranch refs/heads/feature/x\n\n",
+	}
+	selector := &fakeSelector{index: 0}
+	openExec := &fakeOpener{}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &stdout,
+		Stderr:   &stderr,
+		Git:      gitClient,
+		Selector: selector,
+		Opener:   openExec,
+	})
+	cmd.SetArgs([]string{"open", "--branch", "feature/x"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if selector.calls != 0 {
+		t.Fatalf("expected selector not to be called when --branch is provided, got %d", selector.calls)
+	}
+	if openExec.call != 1 {
+		t.Fatalf("expected opener to be called once, got %d", openExec.call)
+	}
+	if openExec.path != featurePath {
+		t.Fatalf("unexpected opener path: %q", openExec.path)
+	}
+}
+
+func TestOpenCommand_ReturnsErrorWhenBranchHasNoLinkedWorktree(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	mainPath := toPosixPathForOpen(t.TempDir())
+	gitClient := &fakeGitClient{
+		output: "worktree " + mainPath + "\nHEAD abc\nbranch refs/heads/main\n\n",
+	}
+	selector := &fakeSelector{index: 0}
+	openExec := &fakeOpener{}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &stdout,
+		Stderr:   &stderr,
+		Git:      gitClient,
+		Selector: selector,
+		Opener:   openExec,
+	})
+	cmd.SetArgs([]string{"open", "--branch", "feature/missing"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected Execute() to return error")
+	}
+	if !strings.Contains(err.Error(), "does not have a linked active worktree") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+	if selector.calls != 0 {
+		t.Fatalf("expected selector not to be called on --branch path, got %d", selector.calls)
+	}
+	if openExec.call != 0 {
+		t.Fatalf("opener should not be called when branch has no worktree, got %d", openExec.call)
+	}
+}
+
 func TestOpenCommand_SkipsPrunableWorktrees(t *testing.T) {
 	t.Parallel()
 
@@ -458,4 +532,8 @@ func newTestLookPath(available map[string]bool) func(file string) (string, error
 		}
 		return "", fmt.Errorf("%s not found", file)
 	}
+}
+
+func toPosixPathForOpen(path string) string {
+	return strings.ReplaceAll(path, "\\", "/")
 }
