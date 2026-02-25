@@ -97,14 +97,22 @@ wto new feature/my-task --open system
 wto open
 ```
 
-4. Remove a worktree:
+4. Select a worktree for terminal workflows:
+
+```sh
+wto enter
+wto enter --print-cd
+wto enter --shell
+```
+
+5. Remove a worktree:
 
 ```sh
 wto rm
 wto rm feature/my-task
 ```
 
-5. Update `wto`:
+6. Update `wto`:
 
 ```sh
 wto update
@@ -184,6 +192,32 @@ Note:
 - `--window` currently applies to `system`, `vscode`, and `cursor`
 - `vim` currently uses best-effort behavior
 - If `--open vscode` or `--open cursor` is explicitly set, missing CLI (`code` / `cursor`) returns an error (no silent fallback)
+
+### `wto enter`
+
+Examples:
+
+```sh
+wto enter
+wto enter --print-cd
+wto enter --shell
+```
+
+Default behavior:
+
+- Runs `git worktree prune --expire now` before listing candidates
+- Skips stale (`prunable`) entries
+- Prints the selected worktree path to stdout
+
+Main options:
+
+- `--print-cd` prints `cd` command hints for your shell
+- `--shell` starts a subshell in the selected worktree
+
+Note:
+
+- A CLI command cannot directly change the current directory of its parent shell
+- Use `wto enter --print-cd` when you want explicit, copyable navigation commands
 
 ### `wto rm`
 
