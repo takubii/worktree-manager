@@ -95,6 +95,7 @@ wto new feature/my-task --open system
 
 ```sh
 wto open
+wto open --branch feature/my-task
 ```
 
 4. Select a worktree for terminal workflows:
@@ -169,6 +170,7 @@ Examples:
 
 ```sh
 wto open
+wto open --branch feature/my-task
 wto open --open vscode
 wto open --open cursor
 wto open --open vim
@@ -184,11 +186,14 @@ Default behavior:
 
 Main options:
 
+- `--branch <branch>`
 - `--open system|vscode|cursor|vim`
 - `--window new|reuse`
 
 Note:
 
+- `--branch` opens the worktree linked to that local branch without showing the selector
+- If the branch does not have a linked active worktree, `wto open --branch` returns an actionable error
 - `--window` currently applies to `system`, `vscode`, and `cursor`
 - `vim` currently uses best-effort behavior
 - If `--open vscode` or `--open cursor` is explicitly set, missing CLI (`code` / `cursor`) returns an error (no silent fallback)
