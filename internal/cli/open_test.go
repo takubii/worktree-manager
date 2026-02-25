@@ -43,13 +43,29 @@ func (o *fakeOpener) Open(_ context.Context, kind string, path string, window op
 	return o.err
 }
 
+type fakeAfterRunner struct {
+	command string
+	path    string
+	call    int
+	err     error
+}
+
+func (r *fakeAfterRunner) Run(_ context.Context, commandTemplate string, path string) error {
+	r.call++
+	r.command = commandTemplate
+	r.path = path
+	return r.err
+}
+
 func TestOpenCommand_OpensSelectedWorktree(t *testing.T) {
 	t.Parallel()
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
+	mainPath := toPosixPathForOpen(t.TempDir())
+	featurePath := toPosixPathForOpen(t.TempDir())
 	gitClient := &fakeGitClient{
-		output: "worktree C:/repo\nHEAD abc\nbranch refs/heads/main\n\nworktree C:/repo-feature\nHEAD def\nbranch refs/heads/feature/x\n\n",
+		output: "worktree " + mainPath + "\nHEAD abc\nbranch refs/heads/main\n\nworktree " + featurePath + "\nHEAD def\nbranch refs/heads/feature/x\n\n",
 	}
 	selector := &fakeSelector{index: 1}
 	openExec := &fakeOpener{}
@@ -80,7 +96,7 @@ func TestOpenCommand_OpensSelectedWorktree(t *testing.T) {
 	if openExec.kind != "vscode" {
 		t.Fatalf("unexpected opener kind: %q", openExec.kind)
 	}
-	if openExec.path != "C:/repo-feature" {
+	if openExec.path != featurePath {
 		t.Fatalf("unexpected opener path: %q", openExec.path)
 	}
 	if openExec.window != openerpkg.WindowNew {
@@ -166,9 +182,10 @@ func TestOpenCommand_SkipsPrunableWorktrees(t *testing.T) {
 	t.Parallel()
 
 	var stderr bytes.Buffer
+	livePath := toPosixPathForOpen(t.TempDir())
 	gitClient := &fakeGitClient{
 		output: "worktree C:/worktrees/stale\nHEAD abc\nbranch refs/heads/aaa\nprunable gitdir file points to non-existent location\n\n" +
-			"worktree C:/worktrees/live\nHEAD def\nbranch refs/heads/main\n\n",
+			"worktree " + livePath + "\nHEAD def\nbranch refs/heads/main\n\n",
 	}
 	selector := &fakeSelector{index: 0}
 	openExec := &fakeOpener{}
@@ -186,11 +203,44 @@ func TestOpenCommand_SkipsPrunableWorktrees(t *testing.T) {
 		t.Fatalf("Execute() returned error: %v", err)
 	}
 
-	if openExec.path != "C:/worktrees/live" {
+	if openExec.path != livePath {
 		t.Fatalf("unexpected opener path: %q", openExec.path)
 	}
 	if !strings.Contains(stderr.String(), "skipped 1 stale worktree entries") {
 		t.Fatalf("expected stale warning, got: %s", stderr.String())
+	}
+}
+
+func TestOpenCommand_SkipsMissingWorktrees(t *testing.T) {
+	t.Parallel()
+
+	var stderr bytes.Buffer
+	livePath := toPosixPathForOpen(t.TempDir())
+	gitClient := &fakeGitClient{
+		output: "worktree C:/worktrees/missing\nHEAD abc\nbranch refs/heads/aaa\n\n" +
+			"worktree " + livePath + "\nHEAD def\nbranch refs/heads/main\n\n",
+	}
+	selector := &fakeSelector{index: 0}
+	openExec := &fakeOpener{}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &stderr,
+		Git:      gitClient,
+		Selector: selector,
+		Opener:   openExec,
+	})
+	cmd.SetArgs([]string{"open"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if openExec.path != livePath {
+		t.Fatalf("unexpected opener path: %q", openExec.path)
+	}
+	if !strings.Contains(stderr.String(), "skipped 1 missing worktree entries") {
+		t.Fatalf("expected missing warning, got: %s", stderr.String())
 	}
 }
 
@@ -216,7 +266,34 @@ func TestOpenCommand_ReturnsErrorWhenOnlyPrunableRemain(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected Execute() to return error")
 	}
-	if !strings.Contains(err.Error(), "no valid worktrees found after pruning stale entries") {
+	if !strings.Contains(err.Error(), "no valid worktrees found after filtering stale/missing entries") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestOpenCommand_ReturnsErrorWhenOnlyMissingRemain(t *testing.T) {
+	t.Parallel()
+
+	gitClient := &fakeGitClient{
+		output: "worktree C:/worktrees/missing\nHEAD abc\nbranch refs/heads/aaa\n\n",
+	}
+	selector := &fakeSelector{index: 0}
+	openExec := &fakeOpener{}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: selector,
+		Opener:   openExec,
+	})
+	cmd.SetArgs([]string{"open"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected Execute() to return error")
+	}
+	if !strings.Contains(err.Error(), "no valid worktrees found after filtering stale/missing entries") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -319,8 +396,10 @@ func TestOpenCommand_ReturnsSelectorError(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
+	mainPath := toPosixPathForOpen(t.TempDir())
+	featurePath := toPosixPathForOpen(t.TempDir())
 	gitClient := &fakeGitClient{
-		output: "worktree C:/repo\nHEAD abc\nbranch refs/heads/main\n\nworktree C:/repo-2\nHEAD def\nbranch refs/heads/feature/x\n\n",
+		output: "worktree " + mainPath + "\nHEAD abc\nbranch refs/heads/main\n\nworktree " + featurePath + "\nHEAD def\nbranch refs/heads/feature/x\n\n",
 	}
 	selector := &fakeSelector{err: errors.New("selection canceled")}
 	openExec := &fakeOpener{}
@@ -351,8 +430,9 @@ func TestOpenCommand_UsesReuseWindowWhenRequested(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
+	repoPath := toPosixPathForOpen(t.TempDir())
 	gitClient := &fakeGitClient{
-		output: "worktree C:/repo\nHEAD abc\nbranch refs/heads/main\n\n",
+		output: "worktree " + repoPath + "\nHEAD abc\nbranch refs/heads/main\n\n",
 	}
 	selector := &fakeSelector{index: 0}
 	openExec := &fakeOpener{}
@@ -372,6 +452,114 @@ func TestOpenCommand_UsesReuseWindowWhenRequested(t *testing.T) {
 
 	if openExec.window != openerpkg.WindowReuse {
 		t.Fatalf("unexpected window mode: %q", openExec.window)
+	}
+}
+
+func TestOpenCommand_PrintCDOutputsHintsAfterOpen(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	worktreePath := toPosixPathForOpen(t.TempDir())
+	hints := &fakeEnterRunner{
+		hints: []string{
+			"cmd.exe: cd /d \"C:\\repo\"",
+			"PowerShell: Set-Location -LiteralPath 'C:\\repo'",
+		},
+	}
+	gitClient := &fakeGitClient{
+		output: "worktree " + worktreePath + "\nHEAD abc\nbranch refs/heads/main\n\n",
+	}
+	selector := &fakeSelector{index: 0}
+	openExec := &fakeOpener{}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &stdout,
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: selector,
+		Opener:   openExec,
+		Enter:    hints,
+	})
+	cmd.SetArgs([]string{"open", "--print-cd"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if openExec.call != 1 {
+		t.Fatalf("expected opener to be called once, got %d", openExec.call)
+	}
+	if !strings.Contains(stdout.String(), "cmd.exe: cd /d") {
+		t.Fatalf("expected cd hint output, got: %s", stdout.String())
+	}
+	if hints.hintsPath != worktreePath {
+		t.Fatalf("unexpected hint path: %q", hints.hintsPath)
+	}
+}
+
+func TestOpenCommand_RunsAfterCommand(t *testing.T) {
+	t.Parallel()
+
+	worktreePath := toPosixPathForOpen(t.TempDir())
+	gitClient := &fakeGitClient{
+		output: "worktree " + worktreePath + "\nHEAD abc\nbranch refs/heads/main\n\n",
+	}
+	selector := &fakeSelector{index: 0}
+	openExec := &fakeOpener{}
+	after := &fakeAfterRunner{}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: selector,
+		Opener:   openExec,
+		After:    after,
+	})
+	cmd.SetArgs([]string{"open", "--after", "echo {path}"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if after.call != 1 {
+		t.Fatalf("expected after command to run once, got %d", after.call)
+	}
+	if after.command != "echo {path}" {
+		t.Fatalf("unexpected after command template: %q", after.command)
+	}
+	if after.path != worktreePath {
+		t.Fatalf("unexpected after command path: %q", after.path)
+	}
+}
+
+func TestOpenCommand_ReturnsErrorWhenAfterCommandFails(t *testing.T) {
+	t.Parallel()
+
+	worktreePath := toPosixPathForOpen(t.TempDir())
+	gitClient := &fakeGitClient{
+		output: "worktree " + worktreePath + "\nHEAD abc\nbranch refs/heads/main\n\n",
+	}
+	selector := &fakeSelector{index: 0}
+	openExec := &fakeOpener{}
+	after := &fakeAfterRunner{err: errors.New("after failed")}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: selector,
+		Opener:   openExec,
+		After:    after,
+	})
+	cmd.SetArgs([]string{"open", "--after", "echo {path}"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected Execute() to return error")
+	}
+	if !strings.Contains(err.Error(), "after failed") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -435,8 +623,9 @@ func TestOpenCommand_ReturnsPruneError(t *testing.T) {
 func TestOpenCommand_UsesConfigDefaultsWhenFlagsAreNotProvided(t *testing.T) {
 	t.Parallel()
 
+	repoPath := toPosixPathForOpen(t.TempDir())
 	gitClient := &fakeGitClient{
-		output: "worktree C:/repo\nHEAD abc\nbranch refs/heads/main\n\n",
+		output: "worktree " + repoPath + "\nHEAD abc\nbranch refs/heads/main\n\n",
 	}
 	selector := &fakeSelector{index: 0}
 	openExec := &fakeOpener{}
@@ -483,8 +672,9 @@ func TestOpenCommand_UsesConfigDefaultsWhenFlagsAreNotProvided(t *testing.T) {
 func TestOpenCommand_FlagsOverrideConfigDefaults(t *testing.T) {
 	t.Parallel()
 
+	repoPath := toPosixPathForOpen(t.TempDir())
 	gitClient := &fakeGitClient{
-		output: "worktree C:/repo\nHEAD abc\nbranch refs/heads/main\n\n",
+		output: "worktree " + repoPath + "\nHEAD abc\nbranch refs/heads/main\n\n",
 	}
 	selector := &fakeSelector{index: 0}
 	openExec := &fakeOpener{}
