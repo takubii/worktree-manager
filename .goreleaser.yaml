@@ -9,6 +9,8 @@ builds:
     binary: wto
     env:
       - CGO_ENABLED=0
+    ldflags:
+      - -s -w -X github.com/takubii/git-worktree-opener/internal/buildinfo.Version={{ if .Tag }}{{ .Tag }}{{ else }}{{ .Version }}{{ end }}
     goos:
       - linux
       - darwin

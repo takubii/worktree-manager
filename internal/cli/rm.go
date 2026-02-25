@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -22,6 +23,7 @@ const (
 func newRmCmd(deps Dependencies) *cobra.Command {
 	var removeForce bool
 	var deleteBranchRaw string
+	var dryRun bool
 
 	cmd := &cobra.Command{
 		Use:   "rm [branch]",
@@ -63,6 +65,10 @@ func newRmCmd(deps Dependencies) *cobra.Command {
 				return err
 			}
 
+			if dryRun {
+				return writeRmDryRunPlan(cmd.OutOrStdout(), selected, removeForce, deleteMode)
+			}
+
 			if selected.Prunable {
 				if err := deps.Git.WorktreePrune(cmd.Context()); err != nil {
 					return err
@@ -87,6 +93,7 @@ func newRmCmd(deps Dependencies) *cobra.Command {
 	}
 
 	cmd.Flags().BoolVar(&removeForce, "force", false, "force worktree removal; when --delete-branch is not set, branch deletion also becomes force")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print planned removal actions without running git mutation commands")
 	cmd.Flags().StringVar(
 		&deleteBranchRaw,
 		"delete-branch",
@@ -147,6 +154,45 @@ func formatWorktreeOptionForRemove(wt git.Worktree) string {
 	}
 
 	return fmt.Sprintf("%s\t[%s]", formatWorktreeOption(wt), status)
+}
+
+func writeRmDryRunPlan(stdout io.Writer, selected git.Worktree, removeForce bool, deleteMode deleteBranchMode) error {
+	commands := make([]string, 0, 3)
+	if selected.Prunable {
+		commands = append(commands, "git worktree prune --expire now")
+	} else {
+		command := "git worktree remove"
+		if removeForce {
+			command += " --force"
+		}
+		command += fmt.Sprintf(" %q", selected.Path)
+		commands = append(commands, command)
+	}
+
+	branch, hasBranch := worktreeLocalBranch(selected)
+	switch deleteMode {
+	case deleteBranchNone:
+		commands = append(commands, "skip local branch deletion (--delete-branch none)")
+	case deleteBranchSafe:
+		if hasBranch {
+			commands = append(commands, fmt.Sprintf("git branch -d %s", branch))
+		}
+	case deleteBranchForce:
+		if hasBranch {
+			commands = append(commands, fmt.Sprintf("git branch -D %s", branch))
+		}
+	}
+
+	if _, err := fmt.Fprintln(stdout, "dry-run: planned git commands (no changes made)"); err != nil {
+		return fmt.Errorf("failed to write dry-run output: %w", err)
+	}
+	for _, command := range commands {
+		if _, err := fmt.Fprintf(stdout, "- %s\n", command); err != nil {
+			return fmt.Errorf("failed to write dry-run output: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func findWorktreeByBranch(worktrees []git.Worktree, targetBranch string) (git.Worktree, error) {

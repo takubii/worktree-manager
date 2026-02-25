@@ -15,8 +15,11 @@ type configOverride struct {
 	Remote              *string
 	BaseBranch          *string
 	WorktreeDirTemplate *string
+	NewFetch            *bool
+	NewPrune            *bool
 	OpenDefault         *string
 	OpenWindow          *string
+	OpenPrune           *bool
 	RMDeleteBranch      *string
 }
 
@@ -32,11 +35,20 @@ func mergeConfig(base Config, override configOverride) Config {
 	if override.WorktreeDirTemplate != nil {
 		merged.WorktreeDirTemplate = *override.WorktreeDirTemplate
 	}
+	if override.NewFetch != nil {
+		merged.New.Fetch = *override.NewFetch
+	}
+	if override.NewPrune != nil {
+		merged.New.Prune = *override.NewPrune
+	}
 	if override.OpenDefault != nil {
 		merged.Open.Default = *override.OpenDefault
 	}
 	if override.OpenWindow != nil {
 		merged.Open.Window = *override.OpenWindow
+	}
+	if override.OpenPrune != nil {
+		merged.Open.Prune = *override.OpenPrune
 	}
 	if override.RMDeleteBranch != nil {
 		merged.RM.DeleteBranch = *override.RMDeleteBranch
@@ -66,6 +78,11 @@ func normalizeOverride(raw rawConfig) (configOverride, error) {
 	}
 	out.WorktreeDirTemplate = template
 
+	if raw.New != nil {
+		out.NewFetch = normalizeOptionalBool(raw.New.Fetch)
+		out.NewPrune = normalizeOptionalBool(raw.New.Prune)
+	}
+
 	if raw.Open != nil {
 		openDefault, err := normalizeOpenKind(raw.Open.Default)
 		if err != nil {
@@ -78,6 +95,7 @@ func normalizeOverride(raw rawConfig) (configOverride, error) {
 			return configOverride{}, err
 		}
 		out.OpenWindow = openWindow
+		out.OpenPrune = normalizeOptionalBool(raw.Open.Prune)
 	}
 
 	if raw.RM != nil {
@@ -89,6 +107,14 @@ func normalizeOverride(raw rawConfig) (configOverride, error) {
 	}
 
 	return out, nil
+}
+
+func normalizeOptionalBool(value *bool) *bool {
+	if value == nil {
+		return nil
+	}
+	normalized := *value
+	return &normalized
 }
 
 func normalizeNonEmptyString(field string, value *string) (*string, error) {

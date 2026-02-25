@@ -24,19 +24,33 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 	var openerName string
 	var noFetch bool
 	var noPrune bool
+	var outputRaw string
 
 	cmd := &cobra.Command{
 		Use:   "new [branch]",
 		Short: "Create a new worktree",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if !noPrune {
+			outputMode, err := parseOutputMode(outputRaw)
+			if err != nil {
+				return err
+			}
+
+			cfg := deps.Config.Load(cmd.Context())
+			resolvedNoPrune := noPrune
+			if !cmd.Flags().Changed("no-prune") {
+				resolvedNoPrune = !cfg.New.Prune
+			}
+			resolvedNoFetch := noFetch
+			if !cmd.Flags().Changed("no-fetch") {
+				resolvedNoFetch = !cfg.New.Fetch
+			}
+
+			if !resolvedNoPrune {
 				if err := deps.Git.WorktreePrune(cmd.Context()); err != nil {
 					return err
 				}
 			}
-
-			cfg := deps.Config.Load(cmd.Context())
 
 			remoteName := cfg.Remote
 			if strings.TrimSpace(remoteName) == "" {
@@ -64,7 +78,7 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 				targetBranch = args[0]
 			}
 
-			if !noFetch {
+			if !resolvedNoFetch {
 				if err := deps.Git.FetchPrune(cmd.Context(), remoteName); err != nil {
 					return err
 				}
@@ -118,6 +132,7 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 				return err
 			}
 
+			opened := false
 			if resolvedOpener != newOpenNone {
 				windowMode, err := opener.ParseWindowMode(cfg.Open.Window)
 				if err != nil {
@@ -127,9 +142,16 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 				if err := deps.Opener.Open(cmd.Context(), resolvedOpener, worktreePath, windowMode); err != nil {
 					return err
 				}
+				opened = true
 			}
 
-			return nil
+			return writeCommandOutput(cmd.OutOrStdout(), outputMode, commandOutput{
+				Command: "new",
+				Path:    worktreePath,
+				Branch:  resolvedBranch,
+				Created: true,
+				Opened:  opened,
+			})
 		},
 	}
 
@@ -137,6 +159,7 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 	cmd.Flags().StringVar(&openerName, "open", newOpenNone, "opener to use after creation: none|"+config.SupportedOpenKindsText)
 	cmd.Flags().BoolVar(&noFetch, "no-fetch", false, "skip running git fetch <remote> --prune before branch resolution")
 	cmd.Flags().BoolVar(&noPrune, "no-prune", false, "skip running git worktree prune --expire now before processing")
+	cmd.Flags().StringVar(&outputRaw, "output", string(outputModeNone), "output mode: "+supportedOutputModesText)
 
 	return cmd
 }

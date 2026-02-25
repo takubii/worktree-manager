@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -665,9 +666,14 @@ func TestOpenCommand_UsesConfigDefaultsWhenFlagsAreNotProvided(t *testing.T) {
 			Remote:              config.DefaultRemote,
 			BaseBranch:          config.DefaultBaseBranch,
 			WorktreeDirTemplate: config.DefaultWorktreeDirTemplate,
+			New: config.New{
+				Fetch: true,
+				Prune: true,
+			},
 			Open: config.Open{
 				Default: "vscode",
 				Window:  "reuse",
+				Prune:   true,
 			},
 			RM: config.RM{
 				DeleteBranch: config.DeleteBranchSafe,
@@ -714,9 +720,14 @@ func TestOpenCommand_FlagsOverrideConfigDefaults(t *testing.T) {
 			Remote:              config.DefaultRemote,
 			BaseBranch:          config.DefaultBaseBranch,
 			WorktreeDirTemplate: config.DefaultWorktreeDirTemplate,
+			New: config.New{
+				Fetch: true,
+				Prune: true,
+			},
 			Open: config.Open{
 				Default: "cursor",
 				Window:  "reuse",
+				Prune:   true,
 			},
 			RM: config.RM{
 				DeleteBranch: config.DeleteBranchSafe,
@@ -743,6 +754,196 @@ func TestOpenCommand_FlagsOverrideConfigDefaults(t *testing.T) {
 	}
 	if openExec.window != openerpkg.WindowNew {
 		t.Fatalf("unexpected window mode: %q", openExec.window)
+	}
+}
+
+func TestOpenCommand_OutputPathPrintsSelectedPath(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	repoPath := toPosixPathForOpen(t.TempDir())
+	gitClient := &fakeGitClient{
+		output: "worktree " + repoPath + "\nHEAD abc\nbranch refs/heads/main\n\n",
+	}
+	selector := &fakeSelector{index: 0}
+	openExec := &fakeOpener{}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &stdout,
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: selector,
+		Opener:   openExec,
+	})
+	cmd.SetArgs([]string{"open", "--output", "path"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if got := strings.TrimSpace(stdout.String()); got != repoPath {
+		t.Fatalf("unexpected path output: %q", got)
+	}
+}
+
+func TestOpenCommand_OutputJSONPrintsPayload(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	repoPath := toPosixPathForOpen(t.TempDir())
+	gitClient := &fakeGitClient{
+		output: "worktree " + repoPath + "\nHEAD abc\nbranch refs/heads/main\n\n",
+	}
+	selector := &fakeSelector{index: 0}
+	openExec := &fakeOpener{}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &stdout,
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: selector,
+		Opener:   openExec,
+	})
+	cmd.SetArgs([]string{"open", "--output", "json"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	var payload commandOutput
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("json.Unmarshal() returned error: %v\noutput=%s", err, stdout.String())
+	}
+	if payload.Command != "open" {
+		t.Fatalf("unexpected command: %q", payload.Command)
+	}
+	if payload.Path != repoPath {
+		t.Fatalf("unexpected path: %q", payload.Path)
+	}
+	if payload.Branch != "main" {
+		t.Fatalf("unexpected branch: %q", payload.Branch)
+	}
+	if payload.Created {
+		t.Fatal("expected created=false")
+	}
+	if !payload.Opened {
+		t.Fatal("expected opened=true")
+	}
+}
+
+func TestOpenCommand_ReturnsErrorWhenPrintCDAndOutputAreCombined(t *testing.T) {
+	t.Parallel()
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+		Git: &fakeGitClient{
+			output: "worktree C:/repo\nHEAD abc\nbranch refs/heads/main\n\n",
+		},
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+		Enter:    &fakeEnterRunner{},
+	})
+	cmd.SetArgs([]string{"open", "--print-cd", "--output", "json"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected Execute() to return error")
+	}
+	if !strings.Contains(err.Error(), "cannot be used together") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
+func TestOpenCommand_UsesConfigToSkipPruneByDefault(t *testing.T) {
+	t.Parallel()
+
+	repoPath := toPosixPathForOpen(t.TempDir())
+	gitClient := &fakeGitClient{
+		output: "worktree " + repoPath + "\nHEAD abc\nbranch refs/heads/main\n\n",
+	}
+	cfgProvider := &fakeConfigProvider{
+		cfg: config.Config{
+			Remote:              config.DefaultRemote,
+			BaseBranch:          config.DefaultBaseBranch,
+			WorktreeDirTemplate: config.DefaultWorktreeDirTemplate,
+			New: config.New{
+				Fetch: true,
+				Prune: true,
+			},
+			Open: config.Open{
+				Default: config.DefaultOpenKind,
+				Window:  config.DefaultOpenWindow,
+				Prune:   false,
+			},
+			RM: config.RM{
+				DeleteBranch: config.DeleteBranchSafe,
+			},
+		},
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+		Config:   cfgProvider,
+	})
+	cmd.SetArgs([]string{"open"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if gitClient.worktreePruneCall != 0 {
+		t.Fatalf("expected WorktreePrune to be skipped, got %d", gitClient.worktreePruneCall)
+	}
+}
+
+func TestOpenCommand_FlagOverridesConfigSkipPrune(t *testing.T) {
+	t.Parallel()
+
+	repoPath := toPosixPathForOpen(t.TempDir())
+	gitClient := &fakeGitClient{
+		output: "worktree " + repoPath + "\nHEAD abc\nbranch refs/heads/main\n\n",
+	}
+	cfgProvider := &fakeConfigProvider{
+		cfg: config.Config{
+			Remote:              config.DefaultRemote,
+			BaseBranch:          config.DefaultBaseBranch,
+			WorktreeDirTemplate: config.DefaultWorktreeDirTemplate,
+			New: config.New{
+				Fetch: true,
+				Prune: true,
+			},
+			Open: config.Open{
+				Default: config.DefaultOpenKind,
+				Window:  config.DefaultOpenWindow,
+				Prune:   false,
+			},
+			RM: config.RM{
+				DeleteBranch: config.DeleteBranchSafe,
+			},
+		},
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+		Config:   cfgProvider,
+	})
+	cmd.SetArgs([]string{"open", "--no-prune=false"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if gitClient.worktreePruneCall != 1 {
+		t.Fatalf("expected WorktreePrune to run once, got %d", gitClient.worktreePruneCall)
 	}
 }
 

@@ -144,6 +144,88 @@ func TestEnterCommand_ShellModeStartsRunner(t *testing.T) {
 	}
 }
 
+func TestEnterCommand_BranchModeSelectsWithoutPrompt(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	mainPath := toPosixPath(t.TempDir())
+	featurePath := toPosixPath(t.TempDir())
+	runner := &fakeEnterRunner{}
+	selector := &fakeSelector{index: 0, err: errors.New("selector should not be called")}
+	gitClient := &fakeGitClient{
+		output: "worktree " + mainPath + "\nHEAD abc\nbranch refs/heads/main\n\n" +
+			"worktree " + featurePath + "\nHEAD def\nbranch refs/heads/feature/x\n\n",
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &stdout,
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: selector,
+		Enter:    runner,
+	})
+	cmd.SetArgs([]string{"enter", "--branch", "feature/x"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if selector.calls != 0 {
+		t.Fatalf("expected selector not to be called, got %d", selector.calls)
+	}
+	if got := strings.TrimSpace(stdout.String()); got != featurePath {
+		t.Fatalf("unexpected path output: %q", got)
+	}
+}
+
+func TestEnterCommand_BranchModeReturnsErrorWhenNoMatch(t *testing.T) {
+	t.Parallel()
+
+	mainPath := toPosixPath(t.TempDir())
+	cmd := NewRootCmd(Dependencies{
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+		Git: &fakeGitClient{
+			output: "worktree " + mainPath + "\nHEAD abc\nbranch refs/heads/main\n\n",
+		},
+		Selector: &fakeSelector{index: 0},
+		Enter:    &fakeEnterRunner{},
+	})
+	cmd.SetArgs([]string{"enter", "--branch", "feature/missing"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected Execute() to return error")
+	}
+	if !strings.Contains(err.Error(), "does not have a linked active worktree") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
+func TestEnterCommand_BranchModeReturnsErrorWhenMultipleMatches(t *testing.T) {
+	t.Parallel()
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+		Git: &fakeGitClient{
+			output: "worktree C:/worktrees/a\nHEAD abc\nbranch refs/heads/feature/x\n\n" +
+				"worktree C:/worktrees/b\nHEAD def\nbranch refs/heads/feature/x\n\n",
+		},
+		Selector: &fakeSelector{index: 0},
+		Enter:    &fakeEnterRunner{},
+	})
+	cmd.SetArgs([]string{"enter", "--branch", "feature/x"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected Execute() to return error")
+	}
+	if !strings.Contains(err.Error(), "multiple worktrees matched branch") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
 func TestEnterCommand_ReturnsErrorForConflictingModes(t *testing.T) {
 	t.Parallel()
 
@@ -248,6 +330,29 @@ func TestEnterCommand_ReturnsErrorWhenSelectedPathIsMissing(t *testing.T) {
 		Enter:    &fakeEnterRunner{},
 	})
 	cmd.SetArgs([]string{"enter"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected Execute() to return error")
+	}
+	if !strings.Contains(err.Error(), "does not exist locally") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestEnterCommand_BranchModeReturnsErrorWhenSelectedPathIsMissing(t *testing.T) {
+	t.Parallel()
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+		Git: &fakeGitClient{
+			output: "worktree C:/repo-missing\nHEAD abc\nbranch refs/heads/main\n\n",
+		},
+		Selector: &fakeSelector{index: 0},
+		Enter:    &fakeEnterRunner{},
+	})
+	cmd.SetArgs([]string{"enter", "--branch", "main"})
 
 	err := cmd.Execute()
 	if err == nil {

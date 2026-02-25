@@ -22,9 +22,14 @@ func DefaultConfig() Config {
 		Remote:              DefaultRemote,
 		BaseBranch:          DefaultBaseBranch,
 		WorktreeDirTemplate: DefaultWorktreeDirTemplate,
+		New: New{
+			Fetch: true,
+			Prune: true,
+		},
 		Open: Open{
 			Default: DefaultOpenKind,
 			Window:  DefaultOpenWindow,
+			Prune:   true,
 		},
 		RM: RM{
 			DeleteBranch: DeleteBranchSafe,

@@ -3,7 +3,6 @@ package cli
 import (
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -21,19 +20,32 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 	var printCD bool
 	var afterCommand string
 	var noPrune bool
+	var outputRaw string
 
 	cmd := &cobra.Command{
 		Use:   "open",
 		Short: "Select and open an existing worktree",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if !noPrune {
+			outputMode, err := parseOutputMode(outputRaw)
+			if err != nil {
+				return err
+			}
+			if printCD && outputMode != outputModeNone {
+				return fmt.Errorf("`--print-cd` and `--output` cannot be used together. Use one mode and retry")
+			}
+
+			cfg := deps.Config.Load(cmd.Context())
+			resolvedNoPrune := noPrune
+			if !cmd.Flags().Changed("no-prune") {
+				resolvedNoPrune = !cfg.Open.Prune
+			}
+
+			if !resolvedNoPrune {
 				if err := deps.Git.WorktreePrune(cmd.Context()); err != nil {
 					return err
 				}
 			}
-
-			cfg := deps.Config.Load(cmd.Context())
 
 			if !cmd.Flags().Changed("open") {
 				openerName = cfg.Open.Default
@@ -92,7 +104,18 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 				}
 			}
 
-			return nil
+			branch := ""
+			if value, ok := worktreeLocalBranch(selected); ok {
+				branch = value
+			}
+
+			return writeCommandOutput(cmd.OutOrStdout(), outputMode, commandOutput{
+				Command: "open",
+				Path:    selected.Path,
+				Branch:  branch,
+				Created: false,
+				Opened:  true,
+			})
 		},
 	}
 
@@ -102,13 +125,14 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 	cmd.Flags().BoolVar(&printCD, "print-cd", false, "print cd command hints for the opened worktree")
 	cmd.Flags().StringVar(&afterCommand, "after", "", "run a follow-up command after open (`{path}` is replaced with selected path)")
 	cmd.Flags().BoolVar(&noPrune, "no-prune", false, "skip running git worktree prune --expire now before listing candidates")
+	cmd.Flags().StringVar(&outputRaw, "output", string(outputModeNone), "output mode: "+supportedOutputModesText)
 	return cmd
 }
 
 func selectWorktreeForOpen(cmd *cobra.Command, deps Dependencies, worktrees []git.Worktree, targetBranch string) (git.Worktree, error) {
 	targetBranch = normalizeBranch(targetBranch)
 	if targetBranch != "" {
-		return findWorktreeForOpenByBranch(worktrees, targetBranch)
+		return findActiveWorktreeByBranch(worktrees, targetBranch, "wto open")
 	}
 
 	options := make([]string, len(worktrees))
@@ -125,44 +149,6 @@ func selectWorktreeForOpen(cmd *cobra.Command, deps Dependencies, worktrees []gi
 	}
 
 	return worktrees[selectedIndex], nil
-}
-
-func findWorktreeForOpenByBranch(worktrees []git.Worktree, targetBranch string) (git.Worktree, error) {
-	if targetBranch == "" {
-		return git.Worktree{}, fmt.Errorf("branch name is empty. Set `--branch <name>` and retry")
-	}
-
-	matches := make([]git.Worktree, 0, 1)
-	for _, wt := range worktrees {
-		branch, ok := worktreeLocalBranch(wt)
-		if !ok {
-			continue
-		}
-		if branch == targetBranch {
-			matches = append(matches, wt)
-		}
-	}
-
-	if len(matches) == 0 {
-		return git.Worktree{}, fmt.Errorf(
-			"branch %q does not have a linked active worktree. Run `wto new %s` to create one, or run `wto list` to inspect available worktrees, then retry",
-			targetBranch,
-			targetBranch,
-		)
-	}
-	if len(matches) > 1 {
-		return git.Worktree{}, fmt.Errorf("multiple worktrees matched branch %q. Run `wto open` without --branch and choose the exact path", targetBranch)
-	}
-
-	match := matches[0]
-	if _, err := os.Stat(match.Path); err != nil {
-		if os.IsNotExist(err) {
-			return git.Worktree{}, fmt.Errorf("worktree path for branch %q does not exist locally: %s. Run `wto list` to inspect entries and `wto rm` to clean stale entries, then retry", targetBranch, match.Path)
-		}
-		return git.Worktree{}, fmt.Errorf("failed to inspect worktree path %q for branch %q: %w", match.Path, targetBranch, err)
-	}
-
-	return match, nil
 }
 
 func formatWorktreeOption(wt git.Worktree) string {

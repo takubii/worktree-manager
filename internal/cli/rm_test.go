@@ -53,6 +53,117 @@ func TestRmCommand_RemovesSelectedWorktreeAndDeletesBranchByDefault(t *testing.T
 	}
 }
 
+func TestRmCommand_DryRun_PrintsPlannedCommandsForActiveWorktree(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	gitClient := &fakeGitClient{
+		output: "worktree C:/repo\nHEAD abc\nbranch refs/heads/main\n\nworktree C:/worktrees/feature-x\nHEAD def\nbranch refs/heads/feature/x\n\n",
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &stdout,
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+	})
+	cmd.SetArgs([]string{"rm", "feature/x", "--dry-run"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, "dry-run: planned git commands") {
+		t.Fatalf("expected dry-run header, got: %s", out)
+	}
+	if !strings.Contains(out, `git worktree remove "C:/worktrees/feature-x"`) {
+		t.Fatalf("expected planned worktree remove command, got: %s", out)
+	}
+	if !strings.Contains(out, "git branch -d feature/x") {
+		t.Fatalf("expected planned branch delete command, got: %s", out)
+	}
+	if len(gitClient.worktreeRemove) != 0 {
+		t.Fatalf("WorktreeRemove should not be called in dry-run, got %+v", gitClient.worktreeRemove)
+	}
+	if len(gitClient.deleteBranchCalls) != 0 {
+		t.Fatalf("DeleteLocalBranch should not be called in dry-run, got %+v", gitClient.deleteBranchCalls)
+	}
+	if gitClient.worktreePruneCall != 0 {
+		t.Fatalf("WorktreePrune should not be called in dry-run, got %d", gitClient.worktreePruneCall)
+	}
+}
+
+func TestRmCommand_DryRun_PrintsPlannedCommandsForStaleWorktree(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	gitClient := &fakeGitClient{
+		output: "worktree C:/worktrees/stale\nHEAD abc\nbranch refs/heads/feature/stale\nprunable gitdir file points to non-existent location\n\n",
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &stdout,
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+	})
+	cmd.SetArgs([]string{"rm", "feature/stale", "--dry-run", "--force"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, "git worktree prune --expire now") {
+		t.Fatalf("expected planned prune command, got: %s", out)
+	}
+	if !strings.Contains(out, "git branch -D feature/stale") {
+		t.Fatalf("expected forced planned branch delete command, got: %s", out)
+	}
+	if len(gitClient.worktreeRemove) != 0 {
+		t.Fatalf("WorktreeRemove should not be called in dry-run, got %+v", gitClient.worktreeRemove)
+	}
+	if len(gitClient.deleteBranchCalls) != 0 {
+		t.Fatalf("DeleteLocalBranch should not be called in dry-run, got %+v", gitClient.deleteBranchCalls)
+	}
+	if gitClient.worktreePruneCall != 0 {
+		t.Fatalf("WorktreePrune should not be called in dry-run, got %d", gitClient.worktreePruneCall)
+	}
+}
+
+func TestRmCommand_DryRun_SkipsBranchDeleteWhenPolicyIsNone(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	gitClient := &fakeGitClient{
+		output: "worktree C:/worktrees/feature-x\nHEAD def\nbranch refs/heads/feature/x\n\n",
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &stdout,
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+	})
+	cmd.SetArgs([]string{"rm", "feature/x", "--dry-run", "--delete-branch", "none"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, "skip local branch deletion (--delete-branch none)") {
+		t.Fatalf("expected branch skip line, got: %s", out)
+	}
+	if strings.Contains(out, "git branch -d") || strings.Contains(out, "git branch -D") {
+		t.Fatalf("did not expect branch delete commands, got: %s", out)
+	}
+}
+
 func TestRmCommand_FindsWorktreeByBranchArgument(t *testing.T) {
 	t.Parallel()
 

@@ -12,13 +12,20 @@ type rawConfig struct {
 	Remote              *string  `json:"remote"`
 	BaseBranch          *string  `json:"baseBranch"`
 	WorktreeDirTemplate *string  `json:"worktreeDirTemplate"`
+	New                 *rawNew  `json:"new"`
 	Open                *rawOpen `json:"open"`
 	RM                  *rawRM   `json:"rm"`
+}
+
+type rawNew struct {
+	Fetch *bool `json:"fetch"`
+	Prune *bool `json:"prune"`
 }
 
 type rawOpen struct {
 	Default *string `json:"default"`
 	Window  *string `json:"window"`
+	Prune   *bool   `json:"prune"`
 }
 
 type rawRM struct {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/takubii/git-worktree-opener/internal/buildinfo"
 	"github.com/takubii/git-worktree-opener/internal/cli"
 	"github.com/takubii/git-worktree-opener/internal/config"
 	"github.com/takubii/git-worktree-opener/internal/git"
@@ -12,7 +13,8 @@ import (
 func main() {
 	gitClient := git.NewClient()
 	rootCmd := cli.NewRootCmd(cli.Dependencies{
-		Git: gitClient,
+		Git:     gitClient,
+		Version: buildinfo.Version,
 		Config: config.NewFileProvider(config.FileProviderOptions{
 			Git:    gitClient,
 			Stderr: os.Stderr,

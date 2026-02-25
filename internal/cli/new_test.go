@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -545,9 +546,14 @@ func TestNewCommand_DoesNotOpenByDefaultWhenFlagsAreNotProvided(t *testing.T) {
 			Remote:              "upstream",
 			BaseBranch:          "develop",
 			WorktreeDirTemplate: "{repoRoot}/../custom-worktrees/{branch}",
+			New: config.New{
+				Fetch: true,
+				Prune: true,
+			},
 			Open: config.Open{
 				Default: "cursor",
 				Window:  "reuse",
+				Prune:   true,
 			},
 			RM: config.RM{
 				DeleteBranch: config.DeleteBranchSafe,
@@ -604,9 +610,14 @@ func TestNewCommand_FlagsOverrideConfigDefaults(t *testing.T) {
 			Remote:              "upstream",
 			BaseBranch:          "develop",
 			WorktreeDirTemplate: "{repoParent}/worktrees/{branch}",
+			New: config.New{
+				Fetch: true,
+				Prune: true,
+			},
 			Open: config.Open{
 				Default: "cursor",
 				Window:  "reuse",
+				Prune:   true,
 			},
 			RM: config.RM{
 				DeleteBranch: config.DeleteBranchSafe,
@@ -640,6 +651,185 @@ func TestNewCommand_FlagsOverrideConfigDefaults(t *testing.T) {
 	}
 	if openExec.window != openerpkg.WindowReuse {
 		t.Fatalf("unexpected window mode: %q", openExec.window)
+	}
+}
+
+func TestNewCommand_OutputPathPrintsCreatedPath(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := createTestRepoRoot(t)
+	expectedPath := filepath.Join(filepath.Dir(repoRoot), "worktrees", filepath.FromSlash("feature/output-path"))
+	var stdout bytes.Buffer
+	gitClient := &fakeGitClient{
+		repoRoot:       repoRoot,
+		localBranches:  []string{"main"},
+		remoteBranches: []string{"origin/main"},
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &stdout,
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+	})
+	cmd.SetArgs([]string{"new", "feature/output-path", "--output", "path"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if got := strings.TrimSpace(stdout.String()); filepath.Clean(got) != filepath.Clean(expectedPath) {
+		t.Fatalf("unexpected path output: want=%q got=%q", expectedPath, got)
+	}
+}
+
+func TestNewCommand_OutputJSONPrintsPayload(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := createTestRepoRoot(t)
+	expectedPath := filepath.Join(filepath.Dir(repoRoot), "worktrees", filepath.FromSlash("feature/output-json"))
+	var stdout bytes.Buffer
+	gitClient := &fakeGitClient{
+		repoRoot:       repoRoot,
+		localBranches:  []string{"main"},
+		remoteBranches: []string{"origin/main"},
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &stdout,
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		LookPath: newTestLookPath(map[string]bool{"code": true}),
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+	})
+	cmd.SetArgs([]string{"new", "feature/output-json", "--open", "vscode", "--output", "json"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	var payload commandOutput
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("json.Unmarshal() returned error: %v\noutput=%s", err, stdout.String())
+	}
+	if payload.Command != "new" {
+		t.Fatalf("unexpected command: %q", payload.Command)
+	}
+	if filepath.Clean(payload.Path) != filepath.Clean(expectedPath) {
+		t.Fatalf("unexpected path: %q", payload.Path)
+	}
+	if payload.Branch != "feature/output-json" {
+		t.Fatalf("unexpected branch: %q", payload.Branch)
+	}
+	if !payload.Created {
+		t.Fatal("expected created=true")
+	}
+	if !payload.Opened {
+		t.Fatal("expected opened=true")
+	}
+}
+
+func TestNewCommand_UsesConfigToSkipFetchAndPruneByDefault(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := createTestRepoRoot(t)
+	gitClient := &fakeGitClient{
+		repoRoot:       repoRoot,
+		localBranches:  []string{"main"},
+		remoteBranches: []string{"origin/main"},
+	}
+	cfgProvider := &fakeConfigProvider{
+		cfg: config.Config{
+			Remote:              config.DefaultRemote,
+			BaseBranch:          config.DefaultBaseBranch,
+			WorktreeDirTemplate: config.DefaultWorktreeDirTemplate,
+			New: config.New{
+				Fetch: false,
+				Prune: false,
+			},
+			Open: config.Open{
+				Default: config.DefaultOpenKind,
+				Window:  config.DefaultOpenWindow,
+				Prune:   true,
+			},
+			RM: config.RM{
+				DeleteBranch: config.DeleteBranchSafe,
+			},
+		},
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+		Config:   cfgProvider,
+	})
+	cmd.SetArgs([]string{"new", "feature/no-network"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if gitClient.fetchRemote != "" {
+		t.Fatalf("expected FetchPrune to be skipped, got remote %q", gitClient.fetchRemote)
+	}
+	if gitClient.worktreePruneCall != 0 {
+		t.Fatalf("expected WorktreePrune to be skipped, got %d", gitClient.worktreePruneCall)
+	}
+}
+
+func TestNewCommand_FlagsOverrideConfigSkipSettings(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := createTestRepoRoot(t)
+	gitClient := &fakeGitClient{
+		repoRoot:       repoRoot,
+		localBranches:  []string{"main"},
+		remoteBranches: []string{"origin/main"},
+	}
+	cfgProvider := &fakeConfigProvider{
+		cfg: config.Config{
+			Remote:              config.DefaultRemote,
+			BaseBranch:          config.DefaultBaseBranch,
+			WorktreeDirTemplate: config.DefaultWorktreeDirTemplate,
+			New: config.New{
+				Fetch: false,
+				Prune: false,
+			},
+			Open: config.Open{
+				Default: config.DefaultOpenKind,
+				Window:  config.DefaultOpenWindow,
+				Prune:   true,
+			},
+			RM: config.RM{
+				DeleteBranch: config.DeleteBranchSafe,
+			},
+		},
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+		Config:   cfgProvider,
+	})
+	cmd.SetArgs([]string{"new", "feature/force-network", "--no-fetch=false", "--no-prune=false"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if gitClient.fetchRemote != config.DefaultRemote {
+		t.Fatalf("expected FetchPrune to run with %q, got %q", config.DefaultRemote, gitClient.fetchRemote)
+	}
+	if gitClient.worktreePruneCall != 1 {
+		t.Fatalf("expected WorktreePrune to run once, got %d", gitClient.worktreePruneCall)
 	}
 }
 

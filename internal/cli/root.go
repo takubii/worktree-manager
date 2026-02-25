@@ -6,6 +6,7 @@ import (
 	"os/exec"
 
 	"github.com/spf13/cobra"
+	"github.com/takubii/git-worktree-opener/internal/buildinfo"
 	"github.com/takubii/git-worktree-opener/internal/config"
 	"github.com/takubii/git-worktree-opener/internal/git"
 	"github.com/takubii/git-worktree-opener/internal/opener"
@@ -17,6 +18,7 @@ import (
 type Dependencies struct {
 	Stdout   io.Writer
 	Stderr   io.Writer
+	Version  string
 	LookPath func(file string) (string, error)
 	Git      git.Client
 	Opener   opener.Opener
@@ -30,15 +32,24 @@ type Dependencies struct {
 // NewRootCmd creates the root command for wto.
 func NewRootCmd(deps Dependencies) *cobra.Command {
 	deps = withDefaults(deps)
+	var showVersion bool
 
 	cmd := &cobra.Command{
 		Use:           "wto",
 		Short:         "Git worktree helper CLI",
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if showVersion {
+				_, err := cmd.OutOrStdout().Write([]byte(deps.Version + "\n"))
+				return err
+			}
+			return cmd.Help()
+		},
 	}
 	cmd.SetOut(deps.Stdout)
 	cmd.SetErr(deps.Stderr)
+	cmd.Flags().BoolVar(&showVersion, "version", false, "print wto version")
 
 	cmd.AddCommand(newListCmd(deps))
 	cmd.AddCommand(newOpenCmd(deps))
@@ -47,6 +58,7 @@ func NewRootCmd(deps Dependencies) *cobra.Command {
 	cmd.AddCommand(newConfigCmd(deps))
 	cmd.AddCommand(newEnterCmd(deps))
 	cmd.AddCommand(newUpdateCmd(deps))
+	cmd.AddCommand(newVersionCmd(deps))
 
 	return cmd
 }
@@ -57,6 +69,9 @@ func withDefaults(deps Dependencies) Dependencies {
 	}
 	if deps.Stderr == nil {
 		deps.Stderr = os.Stderr
+	}
+	if deps.Version == "" {
+		deps.Version = buildinfo.Version
 	}
 	if deps.LookPath == nil {
 		deps.LookPath = exec.LookPath

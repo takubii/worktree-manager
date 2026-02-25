@@ -11,6 +11,7 @@ import (
 func newEnterCmd(deps Dependencies) *cobra.Command {
 	var useShell bool
 	var printCD bool
+	var targetBranch string
 
 	cmd := &cobra.Command{
 		Use:   "enter",
@@ -44,20 +45,29 @@ func newEnterCmd(deps Dependencies) *cobra.Command {
 				return fmt.Errorf("no valid worktrees found after pruning stale entries. Run `wto new` to create one, then retry")
 			}
 
-			options := make([]string, len(activeWorktrees))
-			for i, wt := range activeWorktrees {
-				options[i] = formatWorktreeOption(wt)
-			}
+			targetBranch = normalizeBranch(targetBranch)
+			var selected git.Worktree
+			if targetBranch != "" {
+				selected, err = findActiveWorktreeByBranch(activeWorktrees, targetBranch, "wto enter")
+				if err != nil {
+					return err
+				}
+			} else {
+				options := make([]string, len(activeWorktrees))
+				for i, wt := range activeWorktrees {
+					options[i] = formatWorktreeOption(wt)
+				}
 
-			selectedIndex, err := deps.Selector.Select(cmd.Context(), "Select a worktree to enter:", options)
-			if err != nil {
-				return err
-			}
-			if selectedIndex < 0 || selectedIndex >= len(activeWorktrees) {
-				return fmt.Errorf("invalid worktree selection index: %d", selectedIndex)
-			}
+				selectedIndex, err := deps.Selector.Select(cmd.Context(), "Select a worktree to enter:", options)
+				if err != nil {
+					return err
+				}
+				if selectedIndex < 0 || selectedIndex >= len(activeWorktrees) {
+					return fmt.Errorf("invalid worktree selection index: %d", selectedIndex)
+				}
 
-			selected := activeWorktrees[selectedIndex]
+				selected = activeWorktrees[selectedIndex]
+			}
 			if _, err := os.Stat(selected.Path); err != nil {
 				if os.IsNotExist(err) {
 					return fmt.Errorf("selected worktree path does not exist locally: %s. Run `wto list` to inspect entries, then retry", selected.Path)
@@ -92,6 +102,7 @@ func newEnterCmd(deps Dependencies) *cobra.Command {
 
 	cmd.Flags().BoolVar(&useShell, "shell", false, "start a subshell in the selected worktree")
 	cmd.Flags().BoolVar(&printCD, "print-cd", false, "print cd command hints for the selected worktree")
+	cmd.Flags().StringVar(&targetBranch, "branch", "", "enter worktree linked to this local branch")
 
 	return cmd
 }

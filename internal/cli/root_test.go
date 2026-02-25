@@ -43,4 +43,7 @@ func TestNewRootCmd_HelpIncludesListCommand(t *testing.T) {
 	if !strings.Contains(helpText, "update") {
 		t.Fatalf("help text does not include update command:\n%s", helpText)
 	}
+	if !strings.Contains(helpText, "version") {
+		t.Fatalf("help text does not include version command:\n%s", helpText)
+	}
 }

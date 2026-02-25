@@ -7,14 +7,22 @@ type Config struct {
 	Remote              string `json:"remote"`
 	BaseBranch          string `json:"baseBranch"`
 	WorktreeDirTemplate string `json:"worktreeDirTemplate"`
+	New                 New    `json:"new"`
 	Open                Open   `json:"open"`
 	RM                  RM     `json:"rm"`
+}
+
+// New stores defaults for `wto new`.
+type New struct {
+	Fetch bool `json:"fetch"`
+	Prune bool `json:"prune"`
 }
 
 // Open stores opener defaults.
 type Open struct {
 	Default string `json:"default"`
 	Window  string `json:"window"`
+	Prune   bool   `json:"prune"`
 }
 
 // RM stores removal defaults.

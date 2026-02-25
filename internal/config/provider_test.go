@@ -50,8 +50,13 @@ func TestFileProviderLoad_AppliesGlobalConfig(t *testing.T) {
 	}
 	globalBody := `{
   "remote": "upstream",
+  "new": {
+    "fetch": false,
+    "prune": false
+  },
   "open": {
-    "default": "cursor"
+    "default": "cursor",
+    "prune": false
   }
 }`
 	if err := os.WriteFile(globalPath, []byte(globalBody), 0o644); err != nil {
@@ -74,6 +79,15 @@ func TestFileProviderLoad_AppliesGlobalConfig(t *testing.T) {
 	}
 	if got.Open.Default != "cursor" {
 		t.Fatalf("unexpected open.default: %q", got.Open.Default)
+	}
+	if got.New.Fetch {
+		t.Fatalf("unexpected new.fetch: %v", got.New.Fetch)
+	}
+	if got.New.Prune {
+		t.Fatalf("unexpected new.prune: %v", got.New.Prune)
+	}
+	if got.Open.Prune {
+		t.Fatalf("unexpected open.prune: %v", got.Open.Prune)
 	}
 	if got.Open.Window != DefaultConfig().Open.Window {
 		t.Fatalf("unexpected open.window: %q", got.Open.Window)
