@@ -2,11 +2,12 @@ package updater
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os/exec"
 	"runtime"
 	"strings"
+
+	"github.com/takubii/git-worktree-opener/internal/execerr"
 )
 
 const (
@@ -67,10 +68,10 @@ func (u *Installer) updateUnix(ctx context.Context, version string, stdout io.Wr
 	cmd.Stderr = stderr
 
 	if err := u.runCommand(cmd); err != nil {
-		return Result{}, fmt.Errorf(
-			"failed to run update installer: %w. Run `curl -fsSL %s | sh` manually and retry",
-			err,
-			installScriptURLUnix,
+		return Result{}, execerr.Build(
+			"sh -c installer script",
+			err.Error(),
+			"run `curl -fsSL "+installScriptURLUnix+" | sh` manually and retry",
 		)
 	}
 
@@ -100,10 +101,10 @@ func (u *Installer) updateWindows(ctx context.Context, version string, stdout io
 	cmd.Stderr = stderr
 
 	if err := u.startCommand(cmd); err != nil {
-		return Result{}, fmt.Errorf(
-			"failed to start update installer: %w. Run `iwr %s -UseBasicParsing | iex` in PowerShell and retry",
-			err,
-			installScriptURLWindows,
+		return Result{}, execerr.Build(
+			"powershell installer bootstrap",
+			err.Error(),
+			"run `iwr "+installScriptURLWindows+" -UseBasicParsing | iex` in PowerShell and retry",
 		)
 	}
 

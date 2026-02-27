@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"github.com/takubii/git-worktree-opener/internal/execerr"
 )
 
 func (s *defaultSelector) selectWithFZF(ctx context.Context, prompt string, options []string) (int, error) {
@@ -23,7 +25,7 @@ func (s *defaultSelector) selectWithFZF(ctx context.Context, prompt string, opti
 		if stderrText == "" {
 			return -1, fmt.Errorf("worktree selection was canceled")
 		}
-		return -1, fmt.Errorf("failed to run fzf for selection: %s", stderrText)
+		return -1, execerr.Build("fzf", stderrText, "confirm `fzf --version` works in this shell, then retry")
 	}
 
 	selected := strings.TrimSpace(stdout.String())
@@ -66,7 +68,7 @@ func (s *defaultSelector) selectOrCreateWithFZF(ctx context.Context, prompt stri
 		if stderrText == "" {
 			return SelectOrCreateResult{}, errSelectionCanceled
 		}
-		return SelectOrCreateResult{}, fmt.Errorf("failed to run fzf for selection: %s", stderrText)
+		return SelectOrCreateResult{}, execerr.Build("fzf", stderrText, "confirm `fzf --version` works in this shell, then retry")
 	}
 
 	if selected != "" {

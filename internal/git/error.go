@@ -2,29 +2,33 @@ package git
 
 import (
 	"errors"
-	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/takubii/git-worktree-opener/internal/execerr"
 )
 
 func buildGitCommandError(runErr error, stderrOutput string, command string, nextAction string) error {
 	var execErr *exec.Error
 	if errors.As(runErr, &execErr) && errors.Is(execErr.Err, exec.ErrNotFound) {
-		return fmt.Errorf("`git` command was not found. Install Git and ensure it is available in PATH, then retry")
+		return execerr.Build(
+			"git",
+			"command was not found in PATH",
+			"Install Git and ensure `git --version` works in this shell, then retry",
+		)
+	}
+
+	command = strings.TrimSpace(command)
+	if command == "" {
+		command = "git"
+	} else {
+		command = "git " + command
 	}
 
 	stderrOutput = strings.TrimSpace(stderrOutput)
-	message := fmt.Sprintf("failed to run `git %s`", command)
-	if stderrOutput != "" {
-		message = fmt.Sprintf("%s: %s", message, stderrOutput)
-	} else {
-		message = fmt.Sprintf("%s: %v", message, runErr)
+	if stderrOutput == "" && runErr != nil {
+		stderrOutput = runErr.Error()
 	}
 
-	nextAction = strings.TrimSpace(nextAction)
-	if nextAction == "" {
-		return fmt.Errorf("%s", message)
-	}
-
-	return fmt.Errorf("%s. %s", message, nextAction)
+	return execerr.Build(command, stderrOutput, nextAction)
 }

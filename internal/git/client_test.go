@@ -85,7 +85,10 @@ func TestExecClientWorktreeListPorcelain_ReturnsGuidanceWhenGitMissing(t *testin
 	if err == nil {
 		t.Fatal("expected WorktreeListPorcelain() to return error")
 	}
-	if !strings.Contains(err.Error(), "`git` command was not found") {
+	if !strings.Contains(err.Error(), "command was not found in PATH") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(err.Error(), "Install Git") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

@@ -2,11 +2,12 @@ package cli
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
+
+	"github.com/takubii/git-worktree-opener/internal/execerr"
 )
 
 type enterCommandContextFunc func(ctx context.Context, name string, args ...string) *exec.Cmd
@@ -54,7 +55,7 @@ func (r *defaultEnterRunner) FormatCDHints(path string) []string {
 func (r *defaultEnterRunner) StartShell(ctx context.Context, path string) error {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return fmt.Errorf("selected worktree path is empty. Select a valid worktree and retry")
+		return execerr.Build("interactive shell", "selected worktree path is empty", "select a valid worktree and retry")
 	}
 
 	var shell string
@@ -78,10 +79,10 @@ func (r *defaultEnterRunner) StartShell(ctx context.Context, path string) error 
 	cmd.Stderr = os.Stderr
 
 	if err := r.runCommand(cmd); err != nil {
-		return fmt.Errorf(
-			"failed to start interactive shell in %s: %w. Use `wto enter --print-cd` to get a manual cd command, then retry",
-			path,
-			err,
+		return execerr.Build(
+			shell,
+			err.Error(),
+			"use `wto enter --print-cd` to get a manual cd command, then retry",
 		)
 	}
 

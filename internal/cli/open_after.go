@@ -2,11 +2,12 @@ package cli
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
+
+	"github.com/takubii/git-worktree-opener/internal/execerr"
 )
 
 // AfterRunner executes a follow-up command for `wto open --after`.
@@ -32,10 +33,10 @@ func (r *defaultAfterRunner) Run(ctx context.Context, commandTemplate string, pa
 	commandTemplate = strings.TrimSpace(commandTemplate)
 	path = strings.TrimSpace(path)
 	if commandTemplate == "" {
-		return fmt.Errorf("after command is empty. Set `--after <command>` and retry")
+		return execerr.Build("follow-up command", "command template is empty", "set `--after <command>` and retry")
 	}
 	if path == "" {
-		return fmt.Errorf("selected path is empty for --after command. Select a valid worktree and retry")
+		return execerr.Build("follow-up command", "selected path is empty", "select a valid worktree and retry")
 	}
 
 	finalCommand := commandTemplate
@@ -62,11 +63,7 @@ func (r *defaultAfterRunner) Run(ctx context.Context, commandTemplate string, pa
 	cmd.Stderr = os.Stderr
 
 	if err := r.runCommand(cmd); err != nil {
-		return fmt.Errorf(
-			"failed to run follow-up command for selected worktree (command: %s): %w. Verify `--after` command syntax and retry",
-			commandTemplate,
-			err,
-		)
+		return execerr.Build(commandTemplate, err.Error(), "verify `--after` command syntax and retry")
 	}
 
 	return nil

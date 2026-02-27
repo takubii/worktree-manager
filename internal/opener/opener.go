@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/takubii/git-worktree-opener/internal/execerr"
 )
 
 type execCommandFunc func(ctx context.Context, name string, args ...string) *exec.Cmd
@@ -92,7 +94,11 @@ func (o *defaultOpener) openSystem(ctx context.Context, path string, window Wind
 func (o *defaultOpener) run(ctx context.Context, name string, args ...string) error {
 	cmd := o.execCommand(ctx, name, args...)
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to run opener command `%s`: %w", name, err)
+		command := strings.TrimSpace(name)
+		if len(args) > 0 {
+			command = strings.TrimSpace(command + " " + strings.Join(args, " "))
+		}
+		return execerr.Build(command, err.Error(), "verify opener command availability and arguments, then retry")
 	}
 	return nil
 }
