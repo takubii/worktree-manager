@@ -290,10 +290,14 @@ func TestNewCommand_SelectsBranchWhenArgumentIsMissing(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := createTestRepoRoot(t)
+	linkedPath := strings.ReplaceAll(filepath.Join(filepath.Dir(repoRoot), "worktrees", "feature", "remote"), "\\", "/")
 	gitClient := &fakeGitClient{
 		repoRoot:       repoRoot,
 		localBranches:  []string{"main"},
 		remoteBranches: []string{"origin/main", "origin/feature/remote"},
+		output: "worktree " + linkedPath + "\n" +
+			"HEAD abcdefabcdefabcdefabcdefabcdefabcdefabcd\n" +
+			"branch refs/heads/feature/remote\n\n",
 	}
 	selector := &fakeSelector{index: 1}
 	openExec := &fakeOpener{}
@@ -313,6 +317,12 @@ func TestNewCommand_SelectsBranchWhenArgumentIsMissing(t *testing.T) {
 
 	if selector.calls != 1 {
 		t.Fatalf("expected selector to be called once, got %d", selector.calls)
+	}
+	if len(selector.lastOptions) != 2 {
+		t.Fatalf("unexpected candidate count: %d", len(selector.lastOptions))
+	}
+	if selector.lastOptions[1] != "feature/remote [worktree]" {
+		t.Fatalf("expected decorated linked branch candidate, got %q", selector.lastOptions[1])
 	}
 	if got := gitClient.worktreeAddCalls[0].Branch; got != "feature/remote" {
 		t.Fatalf("unexpected selected branch: %q", got)
@@ -395,14 +405,18 @@ type fakeSelectOrCreateSelector struct {
 	result selectorpkg.SelectOrCreateResult
 	err    error
 	calls  int
+	prompt string
+	items  []string
 }
 
 func (s *fakeSelectOrCreateSelector) Select(_ context.Context, _ string, _ []string) (int, error) {
 	return -1, errors.New("Select should not be called")
 }
 
-func (s *fakeSelectOrCreateSelector) SelectOrCreate(_ context.Context, _ string, _ []string) (selectorpkg.SelectOrCreateResult, error) {
+func (s *fakeSelectOrCreateSelector) SelectOrCreate(_ context.Context, prompt string, items []string) (selectorpkg.SelectOrCreateResult, error) {
 	s.calls++
+	s.prompt = prompt
+	s.items = append([]string(nil), items...)
 	return s.result, s.err
 }
 
@@ -526,6 +540,56 @@ func TestNewCommand_DoesNotValidateExistingBranchSelection(t *testing.T) {
 
 	if len(gitClient.checkBranchName) != 0 {
 		t.Fatalf("CheckBranchName should not be called for existing selection, got: %v", gitClient.checkBranchName)
+	}
+}
+
+func TestNewCommand_ResolvesDecoratedExistingSelectionFromSelectOrCreate(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := createTestRepoRoot(t)
+	linkedPath := strings.ReplaceAll(filepath.Join(filepath.Dir(repoRoot), "worktrees", "feature", "existing"), "\\", "/")
+	gitClient := &fakeGitClient{
+		repoRoot:       repoRoot,
+		localBranches:  []string{"main", "feature/existing"},
+		remoteBranches: []string{"origin/main"},
+		output: "worktree " + linkedPath + "\n" +
+			"HEAD abcdefabcdefabcdefabcdefabcdefabcdefabcd\n" +
+			"branch refs/heads/feature/existing\n\n",
+	}
+	selectorWithCreate := &fakeSelectOrCreateSelector{
+		result: selectorpkg.SelectOrCreateResult{
+			Value: "feature/existing [worktree]",
+			IsNew: false,
+		},
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: selectorWithCreate,
+		Opener:   &fakeOpener{},
+	})
+	cmd.SetArgs([]string{"new"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if selectorWithCreate.calls != 1 {
+		t.Fatalf("expected SelectOrCreate to be called once, got %d", selectorWithCreate.calls)
+	}
+	if len(selectorWithCreate.items) == 0 || !strings.Contains(strings.Join(selectorWithCreate.items, "\n"), "[worktree]") {
+		t.Fatalf("expected decorated branch candidates, got %v", selectorWithCreate.items)
+	}
+	if len(gitClient.worktreeAddCalls) != 1 {
+		t.Fatalf("expected one WorktreeAdd call, got %d", len(gitClient.worktreeAddCalls))
+	}
+	if got := gitClient.worktreeAddCalls[0].Branch; got != "feature/existing" {
+		t.Fatalf("unexpected branch: %q", got)
+	}
+	if len(gitClient.checkBranchName) != 0 {
+		t.Fatalf("CheckBranchName should not run for existing decorated selection, got: %v", gitClient.checkBranchName)
 	}
 }
 

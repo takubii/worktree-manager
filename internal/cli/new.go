@@ -17,7 +17,13 @@ import (
 const (
 	defaultBaseBranch = config.DefaultBaseBranch
 	newOpenNone       = "none"
+	branchLinkedLabel = " [worktree]"
 )
+
+type branchCandidate struct {
+	Name    string
+	Display string
+}
 
 func newNewCmd(deps Dependencies) *cobra.Command {
 	var baseBranch string
@@ -188,21 +194,41 @@ func resolveTargetBranch(
 	remoteSet := asRemoteBranchSet(remoteBranches, remoteName)
 
 	if branchArg == "" {
-		candidates := branchCandidates(localBranches, remoteBranches, remoteName)
+		linkedBranches, err := linkedWorktreeBranchSet(cmd, deps)
+		if err != nil {
+			tracef(cmd.Context(), "new: failed to resolve linked worktree branches for candidate labels: %v", err)
+		}
+
+		candidates := branchCandidates(localBranches, remoteBranches, remoteName, linkedBranches)
 		if len(candidates) == 0 {
 			return "", "", fmt.Errorf("no branches available. Create or fetch branches, then run `wto new` again")
 		}
 		tracef(cmd.Context(), "new: interactive branch selection from %d candidates", len(candidates))
+		candidateDisplays := make([]string, 0, len(candidates))
+		displayToBranch := make(map[string]string, len(candidates))
+		for _, candidate := range candidates {
+			candidateDisplays = append(candidateDisplays, candidate.Display)
+			displayToBranch[candidate.Display] = candidate.Name
+		}
 
 		creator, supportsCreate := deps.Selector.(selector.SelectOrCreator)
 		if supportsCreate {
 			tracef(cmd.Context(), "new: selector supports create flow")
-			result, err := creator.SelectOrCreate(cmd.Context(), "Select or enter a branch for the new worktree:", candidates)
+			result, err := creator.SelectOrCreate(
+				cmd.Context(),
+				"Select or enter a branch for the new worktree:",
+				candidateDisplays,
+			)
 			if err != nil {
 				return "", "", err
 			}
 
 			branchArg = normalizeBranch(result.Value)
+			if !result.IsNew {
+				if mapped, ok := displayToBranch[branchArg]; ok {
+					branchArg = mapped
+				}
+			}
 			if branchArg == "" {
 				return "", "", fmt.Errorf("branch name is empty. Enter a branch name and retry")
 			}
@@ -214,14 +240,18 @@ func resolveTargetBranch(
 			}
 		} else {
 			tracef(cmd.Context(), "new: selector fallback select-only flow")
-			selectedIndex, err := deps.Selector.Select(cmd.Context(), "Select a branch for the new worktree:", candidates)
+			selectedIndex, err := deps.Selector.Select(
+				cmd.Context(),
+				"Select a branch for the new worktree:",
+				candidateDisplays,
+			)
 			if err != nil {
 				return "", "", err
 			}
-			if selectedIndex < 0 || selectedIndex >= len(candidates) {
+			if selectedIndex < 0 || selectedIndex >= len(candidateDisplays) {
 				return "", "", fmt.Errorf("invalid branch selection index: %d", selectedIndex)
 			}
-			branchArg = candidates[selectedIndex]
+			branchArg = candidates[selectedIndex].Name
 		}
 	}
 
@@ -317,8 +347,13 @@ func asRemoteBranchSet(remoteBranches []string, remote string) map[string]struct
 	return set
 }
 
-func branchCandidates(localBranches []string, remoteBranches []string, remote string) []string {
-	candidates := make([]string, 0, len(localBranches)+len(remoteBranches))
+func branchCandidates(
+	localBranches []string,
+	remoteBranches []string,
+	remote string,
+	linkedBranches map[string]struct{},
+) []branchCandidate {
+	candidates := make([]branchCandidate, 0, len(localBranches)+len(remoteBranches))
 	seen := make(map[string]struct{}, len(localBranches)+len(remoteBranches))
 
 	for _, branch := range localBranches {
@@ -330,7 +365,7 @@ func branchCandidates(localBranches []string, remoteBranches []string, remote st
 			continue
 		}
 		seen[normalized] = struct{}{}
-		candidates = append(candidates, normalized)
+		candidates = append(candidates, decorateBranchCandidate(normalized, linkedBranches))
 	}
 
 	prefix := remote + "/"
@@ -347,8 +382,44 @@ func branchCandidates(localBranches []string, remoteBranches []string, remote st
 			continue
 		}
 		seen[short] = struct{}{}
-		candidates = append(candidates, short)
+		candidates = append(candidates, decorateBranchCandidate(short, linkedBranches))
 	}
 
 	return candidates
+}
+
+func decorateBranchCandidate(branch string, linkedBranches map[string]struct{}) branchCandidate {
+	display := branch
+	if _, linked := linkedBranches[branch]; linked {
+		display += branchLinkedLabel
+	}
+
+	return branchCandidate{
+		Name:    branch,
+		Display: display,
+	}
+}
+
+func linkedWorktreeBranchSet(cmd *cobra.Command, deps Dependencies) (map[string]struct{}, error) {
+	raw, err := deps.Git.WorktreeListPorcelain(cmd.Context())
+	if err != nil {
+		return nil, err
+	}
+
+	worktrees, err := git.ParseWorktreeListPorcelain(raw)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse git worktree output while building branch candidates: %w", err)
+	}
+
+	activeWorktrees, _ := splitPrunableWorktrees(worktrees)
+	linked := make(map[string]struct{}, len(activeWorktrees))
+	for _, wt := range activeWorktrees {
+		branch, ok := worktreeLocalBranch(wt)
+		if !ok {
+			continue
+		}
+		linked[branch] = struct{}{}
+	}
+
+	return linked, nil
 }

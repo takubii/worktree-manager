@@ -407,6 +407,7 @@ When `wto new` runs without a branch argument:
 - Uses `fzf` if installed
 - Otherwise uses `promptui`
 - Falls back to numeric selection if interactive UI is unavailable
+- Branches that already have an active linked worktree are shown with ` [worktree]`
 
 You can create a new branch from the selector flow:
 
