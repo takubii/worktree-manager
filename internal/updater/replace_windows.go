@@ -4,15 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/takubii/git-worktree-opener/internal/execerr"
 )
-
-type commandContextFunc func(ctx context.Context, name string, args ...string) *exec.Cmd
-type startCommandFunc func(cmd *exec.Cmd) error
 
 func replaceBinaryWindows(
 	ctx context.Context,

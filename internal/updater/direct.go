@@ -12,6 +12,9 @@ import (
 	"time"
 )
 
+type commandContextFunc func(ctx context.Context, name string, args ...string) *exec.Cmd
+type startCommandFunc func(cmd *exec.Cmd) error
+
 // Direct updates wto by downloading release assets from GitHub directly.
 type Direct struct {
 	goos            string
