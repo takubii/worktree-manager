@@ -182,7 +182,7 @@ jobs:
           args: ${{ steps.goreleaser_args.outputs.value }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GORELEASER_CURRENT_TAG: ${{ github.event_name == 'workflow_dispatch' && needs.preflight.outputs.mode == 'release' && needs.preflight.outputs.tag || '' }}
+          GORELEASER_CURRENT_TAG: ${{ needs.preflight.outputs.mode == 'release' && needs.preflight.outputs.tag || '' }}
 
       - name: Apply manual release flags (workflow_dispatch only)
         if: ${{ github.event_name == 'workflow_dispatch' && needs.preflight.outputs.mode == 'release' }}

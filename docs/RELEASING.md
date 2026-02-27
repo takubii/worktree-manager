@@ -48,9 +48,20 @@ Use manual runs for snapshot checks or controlled release runs.
   - Builds archives and checksums without publishing a GitHub release.
 - `mode=release`
   - Requires `tag` input (existing remote tag).
+  - `GORELEASER_CURRENT_TAG` is always set from the resolved tag in preflight (same behavior for push tag and workflow_dispatch).
   - Supports overrides:
     - `draft` (default: true)
     - `prerelease` (default: false)
+
+## RC -> GA on the same commit
+
+When creating GA from the same commit as an RC tag (for example, `v0.3.0-rc1` then `v0.3.0`):
+
+1. Push the GA tag (`git push origin vX.Y.Z`), or run `workflow_dispatch` with `mode=release` and `tag=vX.Y.Z`.
+2. Confirm preflight resolves the GA tag correctly.
+3. Confirm GoReleaser logs show `GORELEASER_CURRENT_TAG=vX.Y.Z`.
+
+If these checks pass, the workflow will publish assets for the GA tag rather than reusing RC tag metadata.
 
 ## Troubleshooting
 
