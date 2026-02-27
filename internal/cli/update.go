@@ -18,6 +18,7 @@ func newUpdateCmd(deps Dependencies) *cobra.Command {
 			if deps.Updater == nil {
 				return fmt.Errorf("update service is not configured")
 			}
+			tracef(cmd.Context(), "update: requested version=%q", targetVersion)
 
 			result, err := deps.Updater.Update(cmd.Context(), updater.Request{
 				Version: targetVersion,
@@ -27,6 +28,7 @@ func newUpdateCmd(deps Dependencies) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			tracef(cmd.Context(), "update: completed async=%v", result.Async)
 
 			if result.Async {
 				if _, err := fmt.Fprintln(

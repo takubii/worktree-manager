@@ -21,11 +21,14 @@ func newEnterCmd(deps Dependencies) *cobra.Command {
 			if useShell && printCD {
 				return fmt.Errorf("`--shell` and `--print-cd` cannot be used together. Choose one mode and retry")
 			}
+			tracef(cmd.Context(), "enter: branch=%q shell=%v printCD=%v", targetBranch, useShell, printCD)
 
+			tracef(cmd.Context(), "enter: running `git worktree prune --expire now`")
 			if err := deps.Git.WorktreePrune(cmd.Context()); err != nil {
 				return err
 			}
 
+			tracef(cmd.Context(), "enter: running `git worktree list --porcelain`")
 			raw, err := deps.Git.WorktreeListPorcelain(cmd.Context())
 			if err != nil {
 				return err
@@ -35,6 +38,7 @@ func newEnterCmd(deps Dependencies) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("failed to parse git worktree output: %w", err)
 			}
+			tracef(cmd.Context(), "enter: parsed %d worktrees", len(worktrees))
 			if len(worktrees) == 0 {
 				return fmt.Errorf("no worktrees found. Create one first, then run `wto enter`")
 			}
@@ -48,11 +52,13 @@ func newEnterCmd(deps Dependencies) *cobra.Command {
 			targetBranch = normalizeBranch(targetBranch)
 			var selected git.Worktree
 			if targetBranch != "" {
+				tracef(cmd.Context(), "enter: selecting by branch=%s", targetBranch)
 				selected, err = findActiveWorktreeByBranch(activeWorktrees, targetBranch, "wto enter")
 				if err != nil {
 					return err
 				}
 			} else {
+				tracef(cmd.Context(), "enter: selecting interactively from %d candidates", len(activeWorktrees))
 				options := make([]string, len(activeWorktrees))
 				for i, wt := range activeWorktrees {
 					options[i] = formatWorktreeOption(wt)
@@ -76,6 +82,7 @@ func newEnterCmd(deps Dependencies) *cobra.Command {
 			}
 
 			if printCD {
+				tracef(cmd.Context(), "enter: printing cd hints")
 				hints := deps.Enter.FormatCDHints(selected.Path)
 				if len(hints) == 0 {
 					return fmt.Errorf("failed to generate cd hints for %s", selected.Path)
@@ -90,9 +97,11 @@ func newEnterCmd(deps Dependencies) *cobra.Command {
 			}
 
 			if useShell {
+				tracef(cmd.Context(), "enter: starting subshell path=%s", selected.Path)
 				return deps.Enter.StartShell(cmd.Context(), selected.Path)
 			}
 
+			tracef(cmd.Context(), "enter: writing selected path output")
 			if _, err := fmt.Fprintln(cmd.OutOrStdout(), selected.Path); err != nil {
 				return fmt.Errorf("failed to write selected path output: %w", err)
 			}

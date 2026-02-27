@@ -34,6 +34,7 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 			if printCD && outputMode != outputModeNone {
 				return fmt.Errorf("`--print-cd` and `--output` cannot be used together. Use one mode and retry")
 			}
+			tracef(cmd.Context(), "open: branch=%q opener=%q window=%q output=%s printCD=%v noPrune=%v", targetBranch, openerName, windowModeRaw, outputMode, printCD, noPrune)
 
 			cfg := deps.Config.Load(cmd.Context())
 			resolvedNoPrune := noPrune
@@ -42,9 +43,11 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 			}
 
 			if !resolvedNoPrune {
+				tracef(cmd.Context(), "open: running `git worktree prune --expire now`")
 				if err := deps.Git.WorktreePrune(cmd.Context()); err != nil {
 					return err
 				}
+				tracef(cmd.Context(), "open: prune completed")
 			}
 
 			if !cmd.Flags().Changed("open") {
@@ -63,6 +66,7 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 				return err
 			}
 
+			tracef(cmd.Context(), "open: running `git worktree list --porcelain`")
 			raw, err := deps.Git.WorktreeListPorcelain(cmd.Context())
 			if err != nil {
 				return err
@@ -72,6 +76,7 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("failed to parse git worktree output: %w", err)
 			}
+			tracef(cmd.Context(), "open: parsed %d worktrees", len(worktrees))
 			if len(worktrees) == 0 {
 				return fmt.Errorf("no worktrees found. Create one first, then run `wto open`")
 			}
@@ -82,20 +87,24 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 			if len(activeWorktrees) == 0 {
 				return errors.New(errNoValidWorktreesForOpen)
 			}
+			tracef(cmd.Context(), "open: active candidates=%d", len(activeWorktrees))
 
 			selected, err := selectWorktreeForOpen(cmd, deps, activeWorktrees, targetBranch)
 			if err != nil {
 				return err
 			}
+			tracef(cmd.Context(), "open: invoking opener kind=%s path=%s window=%s", openerName, selected.Path, windowMode)
 			if err := deps.Opener.Open(cmd.Context(), openerName, selected.Path, windowMode); err != nil {
 				return err
 			}
 			if strings.TrimSpace(afterCommand) != "" {
+				tracef(cmd.Context(), "open: running after command")
 				if err := deps.After.Run(cmd.Context(), afterCommand, selected.Path); err != nil {
 					return err
 				}
 			}
 			if printCD {
+				tracef(cmd.Context(), "open: printing cd hints")
 				hints := deps.Enter.FormatCDHints(selected.Path)
 				for _, hint := range hints {
 					if _, err := fmt.Fprintln(cmd.OutOrStdout(), hint); err != nil {
@@ -132,8 +141,10 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 func selectWorktreeForOpen(cmd *cobra.Command, deps Dependencies, worktrees []git.Worktree, targetBranch string) (git.Worktree, error) {
 	targetBranch = normalizeBranch(targetBranch)
 	if targetBranch != "" {
+		tracef(cmd.Context(), "open: selecting by branch=%s", targetBranch)
 		return findActiveWorktreeByBranch(worktrees, targetBranch, "wto open")
 	}
+	tracef(cmd.Context(), "open: selecting interactively")
 
 	options := make([]string, len(worktrees))
 	for i, wt := range worktrees {

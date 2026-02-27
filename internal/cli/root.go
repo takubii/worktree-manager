@@ -35,12 +35,16 @@ type Dependencies struct {
 func NewRootCmd(deps Dependencies) *cobra.Command {
 	deps = withDefaults(deps)
 	var showVersion bool
+	var verbose bool
 
 	cmd := &cobra.Command{
 		Use:           "wto",
 		Short:         "Git worktree helper CLI",
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		PersistentPreRun: func(cmd *cobra.Command, _ []string) {
+			cmd.SetContext(withVerbose(cmd.Context(), cmd.ErrOrStderr(), verbose))
+		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if showVersion {
 				_, err := cmd.OutOrStdout().Write([]byte(deps.Version + "\n"))
@@ -51,6 +55,7 @@ func NewRootCmd(deps Dependencies) *cobra.Command {
 	}
 	cmd.SetOut(deps.Stdout)
 	cmd.SetErr(deps.Stderr)
+	cmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "print verbose trace logs to stderr")
 	cmd.Flags().BoolVar(&showVersion, "version", false, "print wto version")
 
 	cmd.AddCommand(newListCmd(deps))

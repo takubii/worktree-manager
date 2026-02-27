@@ -24,16 +24,20 @@ func newListCmd(deps Dependencies) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			tracef(cmd.Context(), "list: format=%s", listFormat)
 
+			tracef(cmd.Context(), "list: running `git worktree list --porcelain`")
 			output, err := deps.Git.WorktreeListPorcelain(cmd.Context())
 			if err != nil {
 				return err
 			}
+			tracef(cmd.Context(), "list: received git worktree output")
 
 			if listFormat == config.ListFormatRaw {
 				if _, err := io.WriteString(cmd.OutOrStdout(), output); err != nil {
 					return fmt.Errorf("failed to write command output: %w", err)
 				}
+				tracef(cmd.Context(), "list: wrote raw output")
 				return nil
 			}
 
@@ -41,6 +45,7 @@ func newListCmd(deps Dependencies) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("failed to parse git worktree output: %w", err)
 			}
+			tracef(cmd.Context(), "list: parsed %d worktrees", len(worktrees))
 
 			cwd, err := os.Getwd()
 			if err != nil {
@@ -48,6 +53,7 @@ func newListCmd(deps Dependencies) *cobra.Command {
 			}
 
 			rows := buildListRows(worktrees, cwd)
+			tracef(cmd.Context(), "list: rendering %d rows as %s", len(rows), listFormat)
 			switch listFormat {
 			case config.ListFormatTable:
 				if err := renderListTable(cmd.OutOrStdout(), rows); err != nil {

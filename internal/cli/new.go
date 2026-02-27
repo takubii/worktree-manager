@@ -35,6 +35,7 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			tracef(cmd.Context(), "new: opener=%q output=%s base=%q noFetch=%v noPrune=%v", openerName, outputMode, baseBranch, noFetch, noPrune)
 
 			cfg := deps.Config.Load(cmd.Context())
 			resolvedNoPrune := noPrune
@@ -47,9 +48,11 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 			}
 
 			if !resolvedNoPrune {
+				tracef(cmd.Context(), "new: running `git worktree prune --expire now`")
 				if err := deps.Git.WorktreePrune(cmd.Context()); err != nil {
 					return err
 				}
+				tracef(cmd.Context(), "new: prune completed")
 			}
 
 			remoteName := cfg.Remote
@@ -79,11 +82,14 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 			}
 
 			if !resolvedNoFetch {
+				tracef(cmd.Context(), "new: running `git fetch %s --prune`", remoteName)
 				if err := deps.Git.FetchPrune(cmd.Context(), remoteName); err != nil {
 					return err
 				}
+				tracef(cmd.Context(), "new: fetch completed")
 			}
 
+			tracef(cmd.Context(), "new: resolving repository root and branches")
 			repoRoot, err := deps.Git.RepoRoot(cmd.Context())
 			if err != nil {
 				return err
@@ -110,6 +116,7 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			tracef(cmd.Context(), "new: resolved branch=%s startPoint=%s", resolvedBranch, startPoint)
 
 			worktreePath, err := config.RenderWorktreeDir(cfg.WorktreeDirTemplate, repoRoot, resolvedBranch)
 			if err != nil {
@@ -131,6 +138,7 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 			}); err != nil {
 				return err
 			}
+			tracef(cmd.Context(), "new: worktree added path=%s", worktreePath)
 
 			opened := false
 			if resolvedOpener != newOpenNone {
@@ -139,6 +147,7 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 					return fmt.Errorf("invalid config open.window value: %w", err)
 				}
 
+				tracef(cmd.Context(), "new: invoking opener kind=%s path=%s window=%s", resolvedOpener, worktreePath, windowMode)
 				if err := deps.Opener.Open(cmd.Context(), resolvedOpener, worktreePath, windowMode); err != nil {
 					return err
 				}
@@ -183,9 +192,11 @@ func resolveTargetBranch(
 		if len(candidates) == 0 {
 			return "", "", fmt.Errorf("no branches available. Create or fetch branches, then run `wto new` again")
 		}
+		tracef(cmd.Context(), "new: interactive branch selection from %d candidates", len(candidates))
 
 		creator, supportsCreate := deps.Selector.(selector.SelectOrCreator)
 		if supportsCreate {
+			tracef(cmd.Context(), "new: selector supports create flow")
 			result, err := creator.SelectOrCreate(cmd.Context(), "Select or enter a branch for the new worktree:", candidates)
 			if err != nil {
 				return "", "", err
@@ -202,6 +213,7 @@ func resolveTargetBranch(
 				}
 			}
 		} else {
+			tracef(cmd.Context(), "new: selector fallback select-only flow")
 			selectedIndex, err := deps.Selector.Select(cmd.Context(), "Select a branch for the new worktree:", candidates)
 			if err != nil {
 				return "", "", err

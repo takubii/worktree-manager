@@ -43,7 +43,9 @@ func newRmCmd(deps Dependencies) *cobra.Command {
 			if removeForce && !cmd.Flags().Changed("delete-branch") {
 				deleteMode = deleteBranchForce
 			}
+			tracef(cmd.Context(), "rm: force=%v dryRun=%v deleteBranch=%s", removeForce, dryRun, deleteMode)
 
+			tracef(cmd.Context(), "rm: running `git worktree list --porcelain`")
 			raw, err := deps.Git.WorktreeListPorcelain(cmd.Context())
 			if err != nil {
 				return err
@@ -56,24 +58,29 @@ func newRmCmd(deps Dependencies) *cobra.Command {
 			if len(worktrees) == 0 {
 				return fmt.Errorf("no worktrees found. Create one first (for example, `wto new`), then retry")
 			}
+			tracef(cmd.Context(), "rm: parsed %d worktrees", len(worktrees))
 
 			selected, err := selectWorktreeForRemove(cmd.Context(), deps, args, worktrees)
 			if err != nil {
 				return err
 			}
+			tracef(cmd.Context(), "rm: selected path=%s prunable=%v", selected.Path, selected.Prunable)
 			if err := ensureSafeCWDForWorktreeRemove(cmd.Context(), deps, selected); err != nil {
 				return err
 			}
 
 			if dryRun {
+				tracef(cmd.Context(), "rm: dry-run mode")
 				return writeRmDryRunPlan(cmd.OutOrStdout(), selected, removeForce, deleteMode)
 			}
 
 			if selected.Prunable {
+				tracef(cmd.Context(), "rm: pruning stale worktree metadata")
 				if err := deps.Git.WorktreePrune(cmd.Context()); err != nil {
 					return err
 				}
 			} else {
+				tracef(cmd.Context(), "rm: running worktree remove")
 				if err := deps.Git.WorktreeRemove(cmd.Context(), selected.Path, removeForce); err != nil {
 					return err
 				}
@@ -88,6 +95,7 @@ func newRmCmd(deps Dependencies) *cobra.Command {
 				return nil
 			}
 
+			tracef(cmd.Context(), "rm: deleting local branch=%s force=%v", branch, deleteMode == deleteBranchForce)
 			return deps.Git.DeleteLocalBranch(cmd.Context(), branch, deleteMode == deleteBranchForce)
 		},
 	}
@@ -123,6 +131,7 @@ func selectWorktreeForRemove(ctx context.Context, deps Dependencies, args []stri
 		if targetBranch == "" {
 			return git.Worktree{}, fmt.Errorf("branch name is empty. Specify a branch and retry")
 		}
+		tracef(ctx, "rm: selecting by branch=%s", targetBranch)
 
 		match, err := findWorktreeByBranch(worktrees, targetBranch)
 		if err != nil {
@@ -130,6 +139,7 @@ func selectWorktreeForRemove(ctx context.Context, deps Dependencies, args []stri
 		}
 		return match, nil
 	}
+	tracef(ctx, "rm: selecting interactively from %d worktrees", len(worktrees))
 
 	options := make([]string, len(worktrees))
 	for i, wt := range worktrees {
