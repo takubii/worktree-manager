@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/takubii/git-worktree-opener/internal/buildinfo"
 	"github.com/takubii/git-worktree-opener/internal/config"
+	"github.com/takubii/git-worktree-opener/internal/doctor"
 	"github.com/takubii/git-worktree-opener/internal/git"
 	"github.com/takubii/git-worktree-opener/internal/opener"
 	"github.com/takubii/git-worktree-opener/internal/selector"
@@ -27,6 +28,7 @@ type Dependencies struct {
 	Selector selector.Selector
 	Config   config.Provider
 	Updater  updater.Service
+	Doctor   doctor.Service
 }
 
 // NewRootCmd creates the root command for wto.
@@ -59,6 +61,7 @@ func NewRootCmd(deps Dependencies) *cobra.Command {
 	cmd.AddCommand(newEnterCmd(deps))
 	cmd.AddCommand(newUpdateCmd(deps))
 	cmd.AddCommand(newVersionCmd(deps))
+	cmd.AddCommand(newDoctorCmd(deps))
 
 	return cmd
 }
@@ -96,6 +99,12 @@ func withDefaults(deps Dependencies) Dependencies {
 	}
 	if deps.Updater == nil {
 		deps.Updater = updater.NewInstaller()
+	}
+	if deps.Doctor == nil {
+		deps.Doctor = doctor.NewService(doctor.Options{
+			LookPath: deps.LookPath,
+			Git:      deps.Git,
+		})
 	}
 	return deps
 }
