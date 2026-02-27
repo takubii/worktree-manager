@@ -24,11 +24,26 @@ Windows (PowerShell):
 iwr https://raw.githubusercontent.com/takubii/git-worktree-opener/main/scripts/install.ps1 -UseBasicParsing | iex
 ```
 
+Windows (`cmd.exe`, PowerShell not required):
+
+```bat
+curl -fsSL -o install.cmd https://raw.githubusercontent.com/takubii/git-worktree-opener/main/scripts/install.cmd
+install.cmd v0.2.0
+```
+
 Install script options:
 
 - `WTO_VERSION=v0.1.0` installs a specific release tag
 - `WTO_INSTALL_DIR=<path>` changes installation directory
 - `WTO_SKIP_CHECKSUM=1` skips SHA256 verification
+
+`install.cmd` behavior:
+
+- Requires explicit version argument (`install.cmd vX.Y.Z`)
+- Supports `WTO_INSTALL_DIR=<path>`
+- Verifies SHA256 using release `checksums.txt`
+- Adds install directory to current `cmd.exe` session `PATH`
+- Does not modify persistent user/system `PATH`
 
 PowerShell install script behavior:
 

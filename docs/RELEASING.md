@@ -28,6 +28,18 @@ This document describes the maintainer workflow for automated releases.
    - add known limitations and migration notes when needed
 6. Publish the draft release.
 
+## Post-Release Smoke Checks (Recommended)
+
+Run a quick install validation for each platform, including Windows `cmd.exe`.
+
+Windows `cmd.exe` example:
+
+```bat
+curl -fsSL -o install.cmd https://raw.githubusercontent.com/takubii/git-worktree-opener/main/scripts/install.cmd
+install.cmd vX.Y.Z
+wto --help
+```
+
 ## Manual CD Run (`workflow_dispatch`)
 
 Use manual runs for snapshot checks or controlled release runs.

@@ -15,14 +15,16 @@ func TestSystemOpenCommandWindows_NewWindow(t *testing.T) {
 		t.Fatalf("systemOpenCommand() returned error: %v", err)
 	}
 
-	if name != "powershell" {
+	if name != "cmd" {
 		t.Fatalf("unexpected command name: %q", name)
 	}
 
 	expected := []string{
-		"-NoProfile",
-		"-Command",
-		"Start-Process -FilePath explorer.exe -ArgumentList '/n,C:/repo/path'",
+		"/c",
+		"start",
+		"",
+		"explorer.exe",
+		"/n,C:/repo/path",
 	}
 	if !reflect.DeepEqual(args, expected) {
 		t.Fatalf("unexpected args: want=%v got=%v", expected, args)
@@ -37,26 +39,18 @@ func TestSystemOpenCommandWindows_ReuseWindow(t *testing.T) {
 		t.Fatalf("systemOpenCommand() returned error: %v", err)
 	}
 
-	if name != "powershell" {
+	if name != "cmd" {
 		t.Fatalf("unexpected command name: %q", name)
 	}
 
 	expected := []string{
-		"-NoProfile",
-		"-Command",
-		"Start-Process -FilePath explorer.exe -ArgumentList 'C:/repo/path'",
+		"/c",
+		"start",
+		"",
+		"explorer.exe",
+		"C:/repo/path",
 	}
 	if !reflect.DeepEqual(args, expected) {
 		t.Fatalf("unexpected args: want=%v got=%v", expected, args)
-	}
-}
-
-func TestQuoteForPowerShellSingle(t *testing.T) {
-	t.Parallel()
-
-	got := quoteForPowerShellSingle("C:/repo/o'neil")
-	want := "C:/repo/o''neil"
-	if got != want {
-		t.Fatalf("unexpected quoted value: want=%q got=%q", want, got)
 	}
 }
