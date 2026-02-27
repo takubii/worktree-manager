@@ -7,6 +7,7 @@
 Download prebuilt binaries from GitHub Releases:
 
 - https://github.com/takubii/git-worktree-opener/releases
+- Latest stable release: `v0.3.0`
 
 ### Quick install scripts
 
@@ -26,7 +27,7 @@ Windows (`cmd.exe`, PowerShell not required):
 
 ```bat
 curl -fsSL -o install.cmd https://raw.githubusercontent.com/takubii/git-worktree-opener/main/scripts/install.cmd
-install.cmd v0.2.0
+install.cmd v0.3.0
 ```
 
 Install script options:
@@ -55,7 +56,7 @@ Release assets include OS/arch archives (`tar.gz` for Linux/macOS, `zip` for Win
 Linux/macOS manual example:
 
 ```sh
-VERSION=v0.1.0
+VERSION=v0.3.0
 curl -LO "https://github.com/takubii/git-worktree-opener/releases/download/${VERSION}/git-worktree-opener_${VERSION}_linux_amd64.tar.gz"
 tar -xzf "git-worktree-opener_${VERSION}_linux_amd64.tar.gz"
 chmod +x wto
@@ -65,7 +66,7 @@ chmod +x wto
 Windows (PowerShell) example:
 
 ```powershell
-$Version = "v0.1.0"
+$Version = "v0.3.0"
 Invoke-WebRequest -Uri "https://github.com/takubii/git-worktree-opener/releases/download/$Version/git-worktree-opener_${Version}_windows_amd64.zip" -OutFile "wto.zip"
 Expand-Archive -Path ".\wto.zip" -DestinationPath "."
 .\wto.exe --help
