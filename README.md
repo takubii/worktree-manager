@@ -8,8 +8,6 @@ Download prebuilt binaries from GitHub Releases:
 
 - https://github.com/takubii/git-worktree-opener/releases
 
-Homebrew / WinGet distribution is planned for a later release.
-
 ### Quick install scripts
 
 Linux/macOS:
@@ -33,7 +31,7 @@ install.cmd v0.2.0
 
 Install script options:
 
-- `WTO_VERSION=v0.1.0` installs a specific release tag
+- `WTO_VERSION=vX.Y.Z` installs a specific release tag
 - `WTO_INSTALL_DIR=<path>` changes installation directory
 - `WTO_SKIP_CHECKSUM=1` skips SHA256 verification
 
@@ -130,14 +128,20 @@ wto rm
 wto rm feature/my-task
 ```
 
-6. Update `wto`:
+6. Diagnose environment issues:
+
+```sh
+wto doctor
+```
+
+7. Update `wto`:
 
 ```sh
 wto update
-wto update --version v0.1.0
+wto update --version vX.Y.Z
 ```
 
-7. Show current version:
+8. Show current version:
 
 ```sh
 wto version
@@ -311,17 +315,32 @@ Examples:
 
 ```sh
 wto update
-wto update --version v0.1.0
+wto update --version vX.Y.Z
 ```
 
 Default behavior:
 
-- Re-runs the official install script and installs the latest release
-- On Windows, starts the updater in background to avoid self-overwrite issues
+- Resolves release metadata from GitHub Releases (`latest` or `--version` tag)
+- Downloads platform archive + `checksums.txt`
+- Verifies SHA256 checksum before applying update
+- On Windows, starts replacement in background to avoid self-overwrite issues
 
 Main option:
 
 - `--version <tag>`
+
+### `wto doctor`
+
+Examples:
+
+```sh
+wto doctor
+```
+
+Default behavior:
+
+- Runs environment checks and prints `[OK]` / `[WARN]` / `[CRIT]` with next actions
+- Returns non-zero only when critical checks fail
 
 ### `wto version`
 
@@ -335,6 +354,10 @@ wto --version
 Default behavior:
 
 - Prints the current `wto` version
+
+## Global Flags
+
+- `--verbose`: prints trace logs to `stderr` for troubleshooting while keeping `stdout` contracts unchanged
 
 ## Configuration
 
@@ -442,6 +465,14 @@ Or use `--open system`.
 
 This happens when your current directory is inside the target worktree.
 Move to another directory (for example, the repo root), then run `wto rm` again.
+
+### `wto update` fails
+
+Use `wto doctor` first, then verify:
+
+- network access to GitHub Releases
+- release tag exists (`--version vX.Y.Z` when pinned)
+- current binary location is writable
 
 ## For Maintainers
 
