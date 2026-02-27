@@ -100,9 +100,7 @@ func TestDirectUpdate_UsesTagEndpointWhenVersionSpecified(t *testing.T) {
 	)
 	defer server.Close()
 
-	var gotCommand string
-	var gotArgs []string
-	var startCalls int
+	var replaceCalls int
 
 	svc := &Direct{
 		goos:       "windows",
@@ -112,13 +110,22 @@ func TestDirectUpdate_UsesTagEndpointWhenVersionSpecified(t *testing.T) {
 		executablePath: func() (string, error) {
 			return filepath.Join(t.TempDir(), "wto.exe"), nil
 		},
-		commandContext: func(_ context.Context, name string, args ...string) *exec.Cmd {
-			gotCommand = name
-			gotArgs = append([]string(nil), args...)
-			return &exec.Cmd{}
-		},
-		startCommand: func(_ *exec.Cmd) error {
-			startCalls++
+		commandContext: exec.CommandContext,
+		startCommand:   (*exec.Cmd).Start,
+		replaceWindows: func(
+			_ context.Context,
+			_ commandContextFunc,
+			_ startCommandFunc,
+			stagedBinaryPath string,
+			targetBinaryPath string,
+		) error {
+			replaceCalls++
+			if filepath.Ext(stagedBinaryPath) != ".exe" {
+				t.Fatalf("unexpected staged binary path: %s", stagedBinaryPath)
+			}
+			if !strings.HasSuffix(strings.ToLower(targetBinaryPath), "wto.exe") {
+				t.Fatalf("unexpected target binary path: %s", targetBinaryPath)
+			}
 			return nil
 		},
 		downloadToFile:  downloadToFile,
@@ -132,20 +139,12 @@ func TestDirectUpdate_UsesTagEndpointWhenVersionSpecified(t *testing.T) {
 	if !result.Async {
 		t.Fatal("expected asynchronous update on Windows")
 	}
-	if startCalls != 1 {
-		t.Fatalf("expected start command call once, got %d", startCalls)
-	}
-	if gotCommand != "cmd" {
-		t.Fatalf("unexpected command: %q", gotCommand)
-	}
-	if len(gotArgs) != 2 || gotArgs[0] != "/c" {
-		t.Fatalf("unexpected args: %v", gotArgs)
+	if replaceCalls != 1 {
+		t.Fatalf("expected replaceWindows call once, got %d", replaceCalls)
 	}
 	if requestedPath != "/repos/takubii/git-worktree-opener/releases/tags/v1.2.3" {
 		t.Fatalf("unexpected requested path: %q", requestedPath)
 	}
-
-	cleanupWindowsReplacementArtifacts(t, gotArgs[1])
 }
 
 func TestDirectUpdate_ReturnsErrorOnChecksumMismatch(t *testing.T) {
@@ -298,29 +297,4 @@ func buildZipArchive(t *testing.T, name string, content []byte) []byte {
 	}
 
 	return buffer.Bytes()
-}
-
-func cleanupWindowsReplacementArtifacts(t *testing.T, scriptPath string) {
-	t.Helper()
-
-	content, err := os.ReadFile(scriptPath)
-	if err != nil {
-		return
-	}
-
-	lines := strings.Split(string(content), "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(strings.TrimRight(line, "\r"))
-		if !strings.HasPrefix(line, "set \"SOURCE=") {
-			continue
-		}
-
-		value := strings.TrimPrefix(line, "set \"SOURCE=")
-		value = strings.TrimSuffix(value, "\"")
-		value = strings.ReplaceAll(value, "\"\"", "\"")
-		_ = os.Remove(value)
-		break
-	}
-
-	_ = os.Remove(scriptPath)
 }

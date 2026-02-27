@@ -14,6 +14,13 @@ import (
 
 type commandContextFunc func(ctx context.Context, name string, args ...string) *exec.Cmd
 type startCommandFunc func(cmd *exec.Cmd) error
+type windowsReplaceFunc func(
+	ctx context.Context,
+	commandContext commandContextFunc,
+	startCommand startCommandFunc,
+	stagedBinaryPath string,
+	targetBinaryPath string,
+) error
 
 // Direct updates wto by downloading release assets from GitHub directly.
 type Direct struct {
@@ -24,6 +31,7 @@ type Direct struct {
 	executablePath  func() (string, error)
 	commandContext  commandContextFunc
 	startCommand    startCommandFunc
+	replaceWindows  windowsReplaceFunc
 	downloadToFile  func(ctx context.Context, client *http.Client, url string, path string) error
 	nowUnixNanoFunc func() int64
 }
@@ -40,6 +48,7 @@ func NewDirect() Service {
 		executablePath:  os.Executable,
 		commandContext:  exec.CommandContext,
 		startCommand:    (*exec.Cmd).Start,
+		replaceWindows:  replaceBinaryWindows,
 		downloadToFile:  downloadToFile,
 		nowUnixNanoFunc: func() int64 { return time.Now().UnixNano() },
 	}
@@ -127,12 +136,15 @@ func (d *Direct) Update(ctx context.Context, req Request) (Result, error) {
 	}
 
 	if d.goos == "windows" {
+		if d.replaceWindows == nil {
+			return Result{}, fmt.Errorf("updater windows replace function is not configured")
+		}
 		stagedPath := filepath.Join(os.TempDir(), fmt.Sprintf("wto-update-%d-%d.exe", os.Getpid(), d.nowUnixNanoFunc()))
 		if err := copyFile(binaryPath, stagedPath, 0o755); err != nil {
 			return Result{}, fmt.Errorf("failed to stage updated Windows binary: %w", err)
 		}
 
-		if err := replaceBinaryWindows(ctx, d.commandContext, d.startCommand, stagedPath, targetPath); err != nil {
+		if err := d.replaceWindows(ctx, d.commandContext, d.startCommand, stagedPath, targetPath); err != nil {
 			return Result{}, err
 		}
 		return Result{Async: true}, nil
