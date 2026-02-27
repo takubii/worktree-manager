@@ -103,7 +103,7 @@ func withDefaults(deps Dependencies) Dependencies {
 		deps.Config = config.NewStaticProvider(config.DefaultConfig())
 	}
 	if deps.Updater == nil {
-		deps.Updater = updater.NewInstaller()
+		deps.Updater = updater.NewDirect()
 	}
 	if deps.Doctor == nil {
 		deps.Doctor = doctor.NewService(doctor.Options{
