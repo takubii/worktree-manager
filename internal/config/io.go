@@ -23,9 +23,10 @@ type rawNew struct {
 }
 
 type rawOpen struct {
-	Default *string `json:"default"`
-	Window  *string `json:"window"`
-	Prune   *bool   `json:"prune"`
+	Default          *string `json:"default"`
+	Window           *string `json:"window"`
+	Prune            *bool   `json:"prune"`
+	TerminalProvider *string `json:"terminalProvider"`
 }
 
 type rawRM struct {

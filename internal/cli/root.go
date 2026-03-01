@@ -107,8 +107,9 @@ func withDefaults(deps Dependencies) Dependencies {
 	}
 	if deps.Doctor == nil {
 		deps.Doctor = doctor.NewService(doctor.Options{
-			LookPath: deps.LookPath,
-			Git:      deps.Git,
+			LookPath:       deps.LookPath,
+			Git:            deps.Git,
+			ConfigProvider: deps.Config,
 		})
 	}
 	return deps

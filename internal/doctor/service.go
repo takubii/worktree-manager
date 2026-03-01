@@ -17,21 +17,23 @@ type repoRootFinder interface {
 
 // Options customizes doctor service behavior.
 type Options struct {
-	LookPath      func(file string) (string, error)
-	Git           repoRootFinder
-	UserConfigDir func() (string, error)
-	ReadFile      func(path string) ([]byte, error)
-	Stat          func(name string) (os.FileInfo, error)
-	GOOS          string
+	LookPath       func(file string) (string, error)
+	Git            repoRootFinder
+	ConfigProvider config.Provider
+	UserConfigDir  func() (string, error)
+	ReadFile       func(path string) ([]byte, error)
+	Stat           func(name string) (os.FileInfo, error)
+	GOOS           string
 }
 
 type service struct {
-	lookPath      func(file string) (string, error)
-	git           repoRootFinder
-	userConfigDir func() (string, error)
-	readFile      func(path string) ([]byte, error)
-	stat          func(name string) (os.FileInfo, error)
-	goos          string
+	lookPath       func(file string) (string, error)
+	git            repoRootFinder
+	configProvider config.Provider
+	userConfigDir  func() (string, error)
+	readFile       func(path string) ([]byte, error)
+	stat           func(name string) (os.FileInfo, error)
+	goos           string
 }
 
 // NewService returns the default doctor service.
@@ -50,17 +52,18 @@ func NewService(opts Options) Service {
 	}
 
 	return &service{
-		lookPath:      opts.LookPath,
-		git:           opts.Git,
-		userConfigDir: opts.UserConfigDir,
-		readFile:      opts.ReadFile,
-		stat:          opts.Stat,
-		goos:          strings.TrimSpace(opts.GOOS),
+		lookPath:       opts.LookPath,
+		git:            opts.Git,
+		configProvider: opts.ConfigProvider,
+		userConfigDir:  opts.UserConfigDir,
+		readFile:       opts.ReadFile,
+		stat:           opts.Stat,
+		goos:           strings.TrimSpace(opts.GOOS),
 	}
 }
 
 func (s *service) Run(ctx context.Context) Report {
-	results := make([]Result, 0, 8)
+	results := make([]Result, 0, 24)
 	hasCritical := false
 
 	gitOK := s.lookPath != nil
@@ -92,8 +95,10 @@ func (s *service) Run(ctx context.Context) Report {
 	}
 
 	repoRoot, repoErr := s.repoRoot(ctx, gitOK)
+	selectedTerminalProvider := s.selectedTerminalProvider(ctx)
 	results = append(results, s.repoResult(repoRoot, repoErr)...)
 	results = append(results, s.openerResults()...)
+	results = append(results, s.terminalProviderResults(selectedTerminalProvider)...)
 	results = append(results, s.configResults(repoRoot, repoErr)...)
 	results = append(results, s.updatePrerequisiteResult()...)
 
@@ -101,6 +106,158 @@ func (s *service) Run(ctx context.Context) Report {
 		Results:     results,
 		HasCritical: hasCritical,
 	}
+}
+
+func (s *service) selectedTerminalProvider(ctx context.Context) string {
+	if s.configProvider == nil {
+		return ""
+	}
+
+	cfg := s.configProvider.Load(ctx)
+	openDefault := strings.ToLower(strings.TrimSpace(cfg.Open.Default))
+	if openDefault != config.OpenKindTerminal {
+		return ""
+	}
+
+	provider := strings.ToLower(strings.TrimSpace(cfg.Open.TerminalProvider))
+	if provider == "" || provider == config.TerminalProviderAuto {
+		return ""
+	}
+
+	return provider
+}
+
+type terminalProviderCheck struct {
+	Provider string
+	Command  string
+	OnlyOS   string
+	AppPaths []string
+}
+
+func (s *service) terminalProviderResults(selectedProvider string) []Result {
+	checks := []terminalProviderCheck{
+		{Provider: config.TerminalProviderWindowsTerminal, Command: "wt", OnlyOS: "windows"},
+		{Provider: config.TerminalProviderCMD, Command: "cmd", OnlyOS: "windows"},
+		{Provider: config.TerminalProviderPowerShell, Command: "powershell", OnlyOS: "windows"},
+		{
+			Provider: config.TerminalProviderMacTerminal,
+			Command:  "open",
+			OnlyOS:   "darwin",
+			AppPaths: []string{
+				"/System/Applications/Utilities/Terminal.app",
+				"/Applications/Utilities/Terminal.app",
+			},
+		},
+		{Provider: config.TerminalProviderGNOMETerminal, Command: "gnome-terminal", OnlyOS: "linux"},
+		{Provider: config.TerminalProviderWezTerm, Command: "wezterm"},
+		{
+			Provider: config.TerminalProviderITerm2,
+			Command:  "open",
+			OnlyOS:   "darwin",
+			AppPaths: []string{
+				"/Applications/iTerm.app",
+			},
+		},
+		{
+			Provider: config.TerminalProviderGhostty,
+			Command:  "ghostty",
+			AppPaths: []string{
+				"/Applications/Ghostty.app",
+			},
+		},
+		{
+			Provider: config.TerminalProviderWarp,
+			Command:  "warp",
+			AppPaths: []string{
+				"/Applications/Warp.app",
+			},
+		},
+		{
+			Provider: config.TerminalProviderTabby,
+			Command:  "tabby",
+			AppPaths: []string{
+				"/Applications/Tabby.app",
+			},
+		},
+	}
+
+	results := make([]Result, 0, len(checks))
+	for _, check := range checks {
+		name := "terminal/" + check.Provider
+		if check.OnlyOS != "" && check.OnlyOS != s.goos {
+			level := LevelOK
+			message := fmt.Sprintf("provider is not applicable on %s (optional)", s.goos)
+			nextAction := "no action required"
+			if selectedProvider == check.Provider {
+				level = LevelWarn
+				message = fmt.Sprintf("provider is configured but not supported on %s", s.goos)
+				nextAction = "choose a supported terminal provider for this OS or set open.terminalProvider to auto"
+			}
+			results = append(results, Result{
+				Name:       name,
+				Level:      level,
+				Message:    message,
+				NextAction: nextAction,
+			})
+			continue
+		}
+
+		available, reason := s.isTerminalProviderAvailable(check)
+		if available {
+			results = append(results, Result{
+				Name:       name,
+				Level:      LevelOK,
+				Message:    "provider command/app is available",
+				NextAction: "no action required",
+			})
+			continue
+		}
+
+		level := LevelOK
+		message := fmt.Sprintf("provider is not installed (optional): %s", reason)
+		nextAction := "no action required"
+		if selectedProvider == check.Provider {
+			level = LevelWarn
+			message = fmt.Sprintf("configured provider is not available: %s", reason)
+			nextAction = "install the configured terminal provider or switch open.terminalProvider to auto"
+		}
+
+		results = append(results, Result{
+			Name:       name,
+			Level:      level,
+			Message:    message,
+			NextAction: nextAction,
+		})
+	}
+
+	return results
+}
+
+func (s *service) isTerminalProviderAvailable(check terminalProviderCheck) (bool, string) {
+	if s.lookPath == nil {
+		return false, "lookPath is not configured"
+	}
+
+	if check.Command != "" {
+		if _, err := s.lookPath(check.Command); err == nil {
+			return true, "command is available"
+		}
+	}
+
+	for _, path := range check.AppPaths {
+		if path == "" {
+			continue
+		}
+		if _, err := s.stat(path); err == nil {
+			return true, "application path exists"
+		}
+	}
+
+	if check.Command != "" {
+		return false, fmt.Sprintf("command `%s` was not found in PATH", check.Command)
+	}
+
+	return false, "provider command is unknown"
 }
 
 func (s *service) repoRoot(ctx context.Context, gitOK bool) (string, error) {

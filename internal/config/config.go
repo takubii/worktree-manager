@@ -20,9 +20,10 @@ type New struct {
 
 // Open stores opener defaults.
 type Open struct {
-	Default string `json:"default"`
-	Window  string `json:"window"`
-	Prune   bool   `json:"prune"`
+	Default          string `json:"default"`
+	Window           string `json:"window"`
+	Prune            bool   `json:"prune"`
+	TerminalProvider string `json:"terminalProvider"`
 }
 
 // RM stores removal defaults.

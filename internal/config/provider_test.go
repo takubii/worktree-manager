@@ -56,7 +56,8 @@ func TestFileProviderLoad_AppliesGlobalConfig(t *testing.T) {
   },
   "open": {
     "default": "cursor",
-    "prune": false
+    "prune": false,
+    "terminalProvider": "warp"
   }
 }`
 	if err := os.WriteFile(globalPath, []byte(globalBody), 0o644); err != nil {
@@ -88,6 +89,9 @@ func TestFileProviderLoad_AppliesGlobalConfig(t *testing.T) {
 	}
 	if got.Open.Prune {
 		t.Fatalf("unexpected open.prune: %v", got.Open.Prune)
+	}
+	if got.Open.TerminalProvider != "warp" {
+		t.Fatalf("unexpected open.terminalProvider: %q", got.Open.TerminalProvider)
 	}
 	if got.Open.Window != DefaultConfig().Open.Window {
 		t.Fatalf("unexpected open.window: %q", got.Open.Window)

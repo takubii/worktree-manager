@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/takubii/git-worktree-opener/internal/config"
 )
 
 type fakeRepoRootFinder struct {
@@ -137,6 +139,79 @@ func TestServiceRun_WindowsUpdatePrerequisitesWarnWhenMissing(t *testing.T) {
 	}
 	if !strings.Contains(result.Message, "curl") || !strings.Contains(result.Message, "tar") || !strings.Contains(result.Message, "certutil") {
 		t.Fatalf("unexpected message: %s", result.Message)
+	}
+}
+
+func TestServiceRun_TerminalProvidersAreReported(t *testing.T) {
+	t.Parallel()
+
+	svc := NewService(Options{
+		LookPath: func(file string) (string, error) {
+			if file == "git" || file == "curl" {
+				return "ok", nil
+			}
+			return "", errors.New("not found")
+		},
+		Git:  fakeRepoRootFinder{err: errors.New("not in repo")},
+		GOOS: "linux",
+	})
+
+	report := svc.Run(context.Background())
+	for _, name := range []string{
+		"terminal/windows-terminal",
+		"terminal/cmd",
+		"terminal/powershell",
+		"terminal/terminal",
+		"terminal/gnome-terminal",
+		"terminal/wezterm",
+		"terminal/iterm2",
+		"terminal/ghostty",
+		"terminal/warp",
+		"terminal/tabby",
+	} {
+		if _, ok := findResult(report.Results, name); !ok {
+			t.Fatalf("expected result %q", name)
+		}
+	}
+}
+
+func TestServiceRun_ConfiguredTerminalProviderMissingWarns(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.DefaultConfig()
+	cfg.Open.Default = config.OpenKindTerminal
+	cfg.Open.TerminalProvider = config.TerminalProviderGNOMETerminal
+
+	svc := NewService(Options{
+		LookPath: func(file string) (string, error) {
+			if file == "git" || file == "curl" {
+				return "ok", nil
+			}
+			return "", errors.New("not found")
+		},
+		Git:            fakeRepoRootFinder{err: errors.New("not in repo")},
+		ConfigProvider: config.NewStaticProvider(cfg),
+		GOOS:           "linux",
+	})
+
+	report := svc.Run(context.Background())
+	gnomeResult, ok := findResult(report.Results, "terminal/gnome-terminal")
+	if !ok {
+		t.Fatal("expected terminal/gnome-terminal result")
+	}
+	if gnomeResult.Level != LevelWarn {
+		t.Fatalf("expected WARN, got %s", gnomeResult.Level)
+	}
+	if !strings.Contains(gnomeResult.Message, "configured provider is not available") {
+		t.Fatalf("unexpected message: %s", gnomeResult.Message)
+	}
+
+	warpResult, ok := findResult(report.Results, "terminal/warp")
+	if !ok {
+		t.Fatal("expected terminal/warp result")
+	}
+	if warpResult.Level != LevelOK {
+		t.Fatalf("expected OK for optional missing provider, got %s", warpResult.Level)
 	}
 }
 

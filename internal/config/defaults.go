@@ -27,9 +27,10 @@ func DefaultConfig() Config {
 			Prune: true,
 		},
 		Open: Open{
-			Default: DefaultOpenKind,
-			Window:  DefaultOpenWindow,
-			Prune:   true,
+			Default:          DefaultOpenKind,
+			Window:           DefaultOpenWindow,
+			Prune:            true,
+			TerminalProvider: DefaultOpenTerminalProvider,
 		},
 		RM: RM{
 			DeleteBranch: DeleteBranchSafe,

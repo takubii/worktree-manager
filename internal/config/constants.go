@@ -7,6 +7,10 @@ const (
 	DefaultOpenKind = opener.KindSystem
 	// DefaultOpenWindow is the built-in window mode.
 	DefaultOpenWindow = string(opener.WindowNew)
+	// OpenKindTerminal is the terminal opener kind.
+	OpenKindTerminal = "terminal"
+	// DefaultOpenTerminalProvider is the built-in terminal provider selection.
+	DefaultOpenTerminalProvider = TerminalProviderAuto
 
 	// ListFormatTable is the table format for `wto list`.
 	ListFormatTable = "table"
@@ -36,9 +40,11 @@ const (
 	ListColumnPathWidth = 64
 
 	// SupportedOpenKindsText is used in help/error messages.
-	SupportedOpenKindsText = "system|vscode|cursor|vim"
+	SupportedOpenKindsText = "system|vscode|cursor|vim|terminal"
 	// SupportedWindowModesText is used in help/error messages.
 	SupportedWindowModesText = "new|reuse"
+	// SupportedTerminalProvidersText is used in help/error messages.
+	SupportedTerminalProvidersText = "auto|windows-terminal|cmd|powershell|terminal|gnome-terminal|wezterm|iterm2|ghostty|warp|tabby"
 	// SupportedDeleteBranchModesText is used in help/error messages.
 	SupportedDeleteBranchModesText = "none|safe|force"
 	// ListSupportedFormatsText is used in help/error messages.
@@ -52,6 +58,29 @@ const (
 	WorktreeTemplateTokenRepoRoot = "repoRoot"
 	// WorktreeTemplateTokenBranch is the {branch} placeholder.
 	WorktreeTemplateTokenBranch = "branch"
+
+	// TerminalProviderAuto lets runtime choose provider by OS policy.
+	TerminalProviderAuto = "auto"
+	// TerminalProviderWindowsTerminal is the Windows Terminal provider.
+	TerminalProviderWindowsTerminal = "windows-terminal"
+	// TerminalProviderCMD is the Windows cmd provider.
+	TerminalProviderCMD = "cmd"
+	// TerminalProviderPowerShell is the Windows PowerShell provider.
+	TerminalProviderPowerShell = "powershell"
+	// TerminalProviderMacTerminal is the macOS Terminal.app provider.
+	TerminalProviderMacTerminal = "terminal"
+	// TerminalProviderGNOMETerminal is the GNOME Terminal provider.
+	TerminalProviderGNOMETerminal = "gnome-terminal"
+	// TerminalProviderWezTerm is the WezTerm provider.
+	TerminalProviderWezTerm = "wezterm"
+	// TerminalProviderITerm2 is the iTerm2 provider.
+	TerminalProviderITerm2 = "iterm2"
+	// TerminalProviderGhostty is the Ghostty provider.
+	TerminalProviderGhostty = "ghostty"
+	// TerminalProviderWarp is the Warp provider.
+	TerminalProviderWarp = "warp"
+	// TerminalProviderTabby is the Tabby provider.
+	TerminalProviderTabby = "tabby"
 )
 
 var (
@@ -60,6 +89,20 @@ var (
 		opener.KindVSCode: {},
 		opener.KindCursor: {},
 		opener.KindVim:    {},
+		OpenKindTerminal:  {},
+	}
+	supportedTerminalProviders = map[string]struct{}{
+		TerminalProviderAuto:            {},
+		TerminalProviderWindowsTerminal: {},
+		TerminalProviderCMD:             {},
+		TerminalProviderPowerShell:      {},
+		TerminalProviderMacTerminal:     {},
+		TerminalProviderGNOMETerminal:   {},
+		TerminalProviderWezTerm:         {},
+		TerminalProviderITerm2:          {},
+		TerminalProviderGhostty:         {},
+		TerminalProviderWarp:            {},
+		TerminalProviderTabby:           {},
 	}
 	supportedTemplateTokens = map[string]struct{}{
 		WorktreeTemplateTokenRepoParent: {},

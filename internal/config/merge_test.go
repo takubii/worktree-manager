@@ -97,3 +97,51 @@ func TestMergeConfig_AppliesBooleanOverrides(t *testing.T) {
 		t.Fatalf("unexpected merged config:\nwant=%+v\ngot=%+v", want, got)
 	}
 }
+
+func TestNormalizeOverride_ReadsOpenTerminalProvider(t *testing.T) {
+	t.Parallel()
+
+	provider := TerminalProviderWarp
+	override, err := normalizeOverride(rawConfig{
+		Open: &rawOpen{
+			TerminalProvider: &provider,
+		},
+	})
+	if err != nil {
+		t.Fatalf("normalizeOverride() returned error: %v", err)
+	}
+
+	if override.OpenTerminalProvider == nil || *override.OpenTerminalProvider != TerminalProviderWarp {
+		t.Fatalf("unexpected OpenTerminalProvider override: %+v", override.OpenTerminalProvider)
+	}
+}
+
+func TestNormalizeOverride_ReturnsErrorForInvalidTerminalProvider(t *testing.T) {
+	t.Parallel()
+
+	provider := "invalid-provider"
+	_, err := normalizeOverride(rawConfig{
+		Open: &rawOpen{
+			TerminalProvider: &provider,
+		},
+	})
+	if err == nil {
+		t.Fatal("expected normalizeOverride() to return error")
+	}
+	if !strings.Contains(err.Error(), "open.terminalProvider") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestMergeConfig_AppliesOpenTerminalProviderOverride(t *testing.T) {
+	t.Parallel()
+
+	provider := TerminalProviderCMD
+	got := mergeConfig(DefaultConfig(), configOverride{
+		OpenTerminalProvider: &provider,
+	})
+
+	if got.Open.TerminalProvider != TerminalProviderCMD {
+		t.Fatalf("unexpected open.terminalProvider: %q", got.Open.TerminalProvider)
+	}
+}

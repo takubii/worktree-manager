@@ -12,15 +12,16 @@ import (
 var placeholderPattern = regexp.MustCompile(`\{([^{}]+)\}`)
 
 type configOverride struct {
-	Remote              *string
-	BaseBranch          *string
-	WorktreeDirTemplate *string
-	NewFetch            *bool
-	NewPrune            *bool
-	OpenDefault         *string
-	OpenWindow          *string
-	OpenPrune           *bool
-	RMDeleteBranch      *string
+	Remote               *string
+	BaseBranch           *string
+	WorktreeDirTemplate  *string
+	NewFetch             *bool
+	NewPrune             *bool
+	OpenDefault          *string
+	OpenWindow           *string
+	OpenPrune            *bool
+	OpenTerminalProvider *string
+	RMDeleteBranch       *string
 }
 
 func mergeConfig(base Config, override configOverride) Config {
@@ -49,6 +50,9 @@ func mergeConfig(base Config, override configOverride) Config {
 	}
 	if override.OpenPrune != nil {
 		merged.Open.Prune = *override.OpenPrune
+	}
+	if override.OpenTerminalProvider != nil {
+		merged.Open.TerminalProvider = *override.OpenTerminalProvider
 	}
 	if override.RMDeleteBranch != nil {
 		merged.RM.DeleteBranch = *override.RMDeleteBranch
@@ -96,6 +100,12 @@ func normalizeOverride(raw rawConfig) (configOverride, error) {
 		}
 		out.OpenWindow = openWindow
 		out.OpenPrune = normalizeOptionalBool(raw.Open.Prune)
+
+		openTerminalProvider, err := normalizeTerminalProvider(raw.Open.TerminalProvider)
+		if err != nil {
+			return configOverride{}, err
+		}
+		out.OpenTerminalProvider = openTerminalProvider
 	}
 
 	if raw.RM != nil {
@@ -165,6 +175,19 @@ func normalizeDeleteBranch(value *string) (*string, error) {
 	default:
 		return nil, fmt.Errorf("rm.deleteBranch %q is invalid. Use one of: %s", *value, SupportedDeleteBranchModesText)
 	}
+}
+
+func normalizeTerminalProvider(value *string) (*string, error) {
+	if value == nil {
+		return nil, nil
+	}
+
+	trimmed := strings.ToLower(strings.TrimSpace(*value))
+	if _, ok := supportedTerminalProviders[trimmed]; ok {
+		return &trimmed, nil
+	}
+
+	return nil, fmt.Errorf("open.terminalProvider %q is invalid. Use one of: %s", *value, SupportedTerminalProvidersText)
 }
 
 func normalizeWorktreeDirTemplate(value *string) (*string, error) {
