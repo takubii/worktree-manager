@@ -2,7 +2,9 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -644,5 +646,73 @@ func TestRmCommand_ReturnsErrorWhenCurrentDirectoryIsInsideTargetWorktree(t *tes
 	}
 	if len(gitClient.deleteBranchCalls) != 0 {
 		t.Fatalf("DeleteLocalBranch should not be called, got %+v", gitClient.deleteBranchCalls)
+	}
+}
+
+func TestCleanupEmptyBranchParentDirs_RemovesMatchingEmptyParents(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	worktreePath := filepath.Join(base, "worktrees", "feature", "branch-a")
+	if err := os.MkdirAll(worktreePath, 0o755); err != nil {
+		t.Fatalf("MkdirAll() returned error: %v", err)
+	}
+	if err := os.Remove(worktreePath); err != nil {
+		t.Fatalf("Remove() returned error: %v", err)
+	}
+
+	cleanupEmptyBranchParentDirs(context.Background(), worktreePath, "feature/branch-a")
+
+	parent := filepath.Join(base, "worktrees", "feature")
+	if _, err := os.Stat(parent); !os.IsNotExist(err) {
+		t.Fatalf("expected parent directory to be removed, stat err=%v", err)
+	}
+	root := filepath.Join(base, "worktrees")
+	if _, err := os.Stat(root); err != nil {
+		t.Fatalf("expected worktrees root to remain, got error: %v", err)
+	}
+}
+
+func TestCleanupEmptyBranchParentDirs_StopsWhenParentIsNotEmpty(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	worktreePath := filepath.Join(base, "worktrees", "feature", "branch-a")
+	otherPath := filepath.Join(base, "worktrees", "feature", "branch-b")
+	if err := os.MkdirAll(worktreePath, 0o755); err != nil {
+		t.Fatalf("MkdirAll() returned error: %v", err)
+	}
+	if err := os.MkdirAll(otherPath, 0o755); err != nil {
+		t.Fatalf("MkdirAll() returned error: %v", err)
+	}
+	if err := os.Remove(worktreePath); err != nil {
+		t.Fatalf("Remove() returned error: %v", err)
+	}
+
+	cleanupEmptyBranchParentDirs(context.Background(), worktreePath, "feature/branch-a")
+
+	parent := filepath.Join(base, "worktrees", "feature")
+	if _, err := os.Stat(parent); err != nil {
+		t.Fatalf("expected non-empty parent directory to remain, got error: %v", err)
+	}
+}
+
+func TestCleanupEmptyBranchParentDirs_SkipsWhenPathDoesNotMatchBranchSegments(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	worktreePath := filepath.Join(base, "worktrees", "feature-branch-a")
+	if err := os.MkdirAll(worktreePath, 0o755); err != nil {
+		t.Fatalf("MkdirAll() returned error: %v", err)
+	}
+	if err := os.Remove(worktreePath); err != nil {
+		t.Fatalf("Remove() returned error: %v", err)
+	}
+
+	cleanupEmptyBranchParentDirs(context.Background(), worktreePath, "feature/branch-a")
+
+	root := filepath.Join(base, "worktrees")
+	if _, err := os.Stat(root); err != nil {
+		t.Fatalf("expected worktrees root to remain, got error: %v", err)
 	}
 }

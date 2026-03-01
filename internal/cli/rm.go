@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -83,6 +84,11 @@ func newRmCmd(deps Dependencies) *cobra.Command {
 				tracef(cmd.Context(), "rm: running worktree remove")
 				if err := deps.Git.WorktreeRemove(cmd.Context(), selected.Path, removeForce); err != nil {
 					return err
+				}
+
+				branch, ok := worktreeLocalBranch(selected)
+				if ok {
+					cleanupEmptyBranchParentDirs(cmd.Context(), selected.Path, branch)
 				}
 			}
 
@@ -268,4 +274,40 @@ func ensureSafeCWDForWorktreeRemove(ctx context.Context, deps Dependencies, targ
 		"current directory is inside the target worktree (%s). Move to another directory and retry. Run `wto list` to inspect worktree paths",
 		target.Path,
 	)
+}
+
+func cleanupEmptyBranchParentDirs(ctx context.Context, worktreePath string, branch string) {
+	segments := strings.Split(strings.TrimSpace(branch), "/")
+	if len(segments) < 2 {
+		return
+	}
+
+	currentPath := filepath.Clean(worktreePath)
+	leaf := filepath.Base(currentPath)
+	if leaf != segments[len(segments)-1] {
+		tracef(ctx, "rm: skip empty-parent cleanup due to path/branch mismatch leaf=%q branch=%q", leaf, branch)
+		return
+	}
+
+	for i := len(segments) - 2; i >= 0; i-- {
+		parent := filepath.Dir(currentPath)
+		if parent == currentPath {
+			break
+		}
+
+		expected := segments[i]
+		actual := filepath.Base(parent)
+		if actual != expected {
+			tracef(ctx, "rm: stop empty-parent cleanup due to segment mismatch expected=%q actual=%q path=%q", expected, actual, parent)
+			break
+		}
+
+		if err := os.Remove(parent); err != nil {
+			tracef(ctx, "rm: stop empty-parent cleanup path=%q err=%v", parent, err)
+			break
+		}
+
+		tracef(ctx, "rm: removed empty parent directory %q", parent)
+		currentPath = parent
+	}
 }
