@@ -105,6 +105,7 @@ wto list
 wto new
 wto new feature/my-task
 wto new feature/my-task --open system
+wto new feature/my-task --open terminal --terminal-provider auto
 ```
 
 3. Open an existing worktree:
@@ -112,6 +113,7 @@ wto new feature/my-task --open system
 ```sh
 wto open
 wto open --branch feature/my-task
+wto open --open terminal --terminal-provider auto
 ```
 
 4. Select a worktree for terminal workflows:
@@ -179,6 +181,7 @@ Examples:
 wto new
 wto new feature/my-task
 wto new feature/my-task --base main --open vscode
+wto new feature/my-task --open terminal --terminal-provider windows-terminal
 wto new feature/my-task --output path
 wto new feature/my-task --output json
 ```
@@ -193,7 +196,8 @@ Default behavior:
 Main options:
 
 - `--base <branch>`
-- `--open none|system|vscode|cursor|vim`
+- `--open none|system|vscode|cursor|vim|terminal`
+- `--terminal-provider auto|windows-terminal|cmd|powershell|terminal|gnome-terminal|wezterm|iterm2|ghostty|warp|tabby` (only with `--open terminal`)
 - `--no-fetch`
 - `--no-prune`
 - `--output none|path|json`
@@ -212,6 +216,8 @@ wto open --output json
 wto open --open vscode
 wto open --open cursor
 wto open --open vim
+wto open --open terminal --terminal-provider auto
+wto open --open terminal --terminal-provider powershell
 wto open --window reuse
 ```
 
@@ -229,7 +235,8 @@ Main options:
 - `--after "<command>"`
 - `--no-prune`
 - `--output none|path|json`
-- `--open system|vscode|cursor|vim`
+- `--open system|vscode|cursor|vim|terminal`
+- `--terminal-provider auto|windows-terminal|cmd|powershell|terminal|gnome-terminal|wezterm|iterm2|ghostty|warp|tabby` (only with `--open terminal`)
 - `--window new|reuse`
 
 Note:
@@ -239,7 +246,14 @@ Note:
 - `--print-cd` prints shell navigation hints for the selected worktree path
 - `--print-cd` cannot be combined with `--output`
 - `--after` runs a follow-up command after open (`{path}` is replaced with the selected path)
-- `--window` currently applies to `system`, `vscode`, and `cursor`
+- `--window` applies to `system`, `vscode`, `cursor`, and `terminal` (best-effort by provider)
+- `--open terminal` supports provider selection via `--terminal-provider` or `open.terminalProvider`
+- auto terminal provider policy:
+  - Windows: `windows-terminal` (`wt`) -> `cmd` -> `powershell`
+  - macOS: `terminal` (Terminal.app) only
+  - Linux: `gnome-terminal` -> `x-terminal-emulator` -> `xterm`
+- `ghostty`, `warp`, and `tabby` are explicit providers (not part of auto detection)
+- some terminal providers do not guarantee `--window reuse`; `wto` prints a warning and continues
 - `vim` currently uses best-effort behavior
 - If `--open vscode` or `--open cursor` is explicitly set, missing CLI (`code` / `cursor`) returns an error (no silent fallback)
 
@@ -341,6 +355,9 @@ wto doctor
 Default behavior:
 
 - Runs environment checks and prints `[OK]` / `[WARN]` / `[CRIT]` with next actions
+- Includes terminal provider availability checks (`terminal/*`)
+- Optional providers that are not installed are shown as `[OK] ... (optional)`
+- If configured terminal provider is unavailable, doctor reports `[WARN]` with remediation
 - Returns non-zero only when critical checks fail
 
 ### `wto version`
@@ -371,6 +388,7 @@ flag > repo (.wtoconfig.json) > global (config.json) > built-in defaults
 Note:
 
 - `open.default` is used by `wto open`
+- `open.terminalProvider` sets the default provider for `--open terminal` (`flag > config > auto`)
 - `wto new` does not auto-open unless you set `--open`
 - `new.fetch` / `new.prune` set defaults for `wto new` network/prune behavior
 - `open.prune` sets default prune behavior for `wto open`
@@ -394,7 +412,8 @@ Supported keys:
   "open": {
     "default": "system",
     "window": "new",
-    "prune": true
+    "prune": true,
+    "terminalProvider": "auto"
   },
   "rm": {
     "deleteBranch": "safe"
@@ -461,6 +480,18 @@ Install the corresponding CLI command and ensure it is on `PATH`:
 - Cursor: `cursor`
 
 Or use `--open system`.
+
+### `--open terminal` fails
+
+Check the selected provider availability:
+
+- auto mode uses OS defaults:
+  - Windows: `wt` -> `cmd` -> `powershell`
+  - macOS: Terminal.app
+  - Linux: `gnome-terminal` -> `x-terminal-emulator` -> `xterm`
+- explicit providers require corresponding CLI/app availability (`wezterm`, `iterm2`, `ghostty`, `warp`, `tabby`)
+
+Use `wto doctor` to verify terminal provider status and recommended next actions.
 
 ### `wto rm` refuses to remove
 

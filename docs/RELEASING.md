@@ -40,6 +40,27 @@ install.cmd vX.Y.Z
 wto --help
 ```
 
+Terminal opener smoke checks:
+
+```sh
+wto open --help
+wto new --help
+wto doctor
+```
+
+Windows (`cmd.exe`) terminal provider smoke:
+
+```bat
+wto open --open terminal --terminal-provider auto
+wto open --open terminal --terminal-provider powershell
+```
+
+Linux/macOS terminal provider smoke:
+
+```sh
+wto open --open terminal --terminal-provider auto
+```
+
 ## Manual CD Run (`workflow_dispatch`)
 
 Use manual runs for snapshot checks or controlled release runs.
