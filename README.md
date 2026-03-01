@@ -316,6 +316,8 @@ Examples:
 wto config init
 wto config init --force
 wto config show
+wto config path
+wto config path --json
 ```
 
 Default behavior:
@@ -323,6 +325,7 @@ Default behavior:
 - Config is optional (0-config works)
 - `config init` creates global config file
 - `config show` prints effective config as JSON
+- `config path` prints global/repo config file locations and existence status
 
 ### `wto update`
 
@@ -397,6 +400,8 @@ Config file locations:
 
 - Global: `<os.UserConfigDir()>/git-worktree-opener/config.json`
 - Repo override: `<repo-root>/.wtoconfig.json`
+
+Use `wto config path` to print resolved paths and whether each file exists.
 
 Supported keys:
 

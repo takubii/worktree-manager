@@ -2,6 +2,9 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -103,5 +106,110 @@ func TestConfigShowCommand_PrintsEffectiveConfigJSON(t *testing.T) {
 	}
 	if cfgProvider.loadCalls != 1 {
 		t.Fatalf("expected one config load, got %d", cfgProvider.loadCalls)
+	}
+}
+
+func TestConfigPathCommand_PrintsGlobalAndRepoPaths(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	gitClient := &fakeGitClient{
+		repoRoot: "C:/repo/project",
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout: &stdout,
+		Stderr: &bytes.Buffer{},
+		Git:    gitClient,
+		Config: &fakeConfigProvider{cfg: config.DefaultConfig()},
+	})
+	cmd.SetArgs([]string{"config", "path"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, "global: ") {
+		t.Fatalf("expected global path output, got: %s", out)
+	}
+	if !strings.Contains(out, config.AppConfigDirName) || !strings.Contains(out, config.GlobalConfigFileName) {
+		t.Fatalf("expected global config path components, got: %s", out)
+	}
+
+	expectedRepoPath := filepath.Join("C:/repo/project", config.RepoConfigFileName)
+	if !strings.Contains(out, "repo: "+expectedRepoPath) {
+		t.Fatalf("expected repo path output %q, got: %s", expectedRepoPath, out)
+	}
+}
+
+func TestConfigPathCommand_PrintsRepoUnavailableOutsideRepository(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	gitClient := &fakeGitClient{
+		repoRootErr: errors.New("not a git repository"),
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout: &stdout,
+		Stderr: &bytes.Buffer{},
+		Git:    gitClient,
+		Config: &fakeConfigProvider{cfg: config.DefaultConfig()},
+	})
+	cmd.SetArgs([]string{"config", "path"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, "repo: not in a git repository") {
+		t.Fatalf("expected repo unavailable message, got: %s", out)
+	}
+}
+
+func TestConfigPathCommand_JSONOutput(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	gitClient := &fakeGitClient{
+		repoRoot: "C:/repo/project",
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout: &stdout,
+		Stderr: &bytes.Buffer{},
+		Git:    gitClient,
+		Config: &fakeConfigProvider{cfg: config.DefaultConfig()},
+	})
+	cmd.SetArgs([]string{"config", "path", "--json"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("json.Unmarshal() returned error: %v\noutput:\n%s", err, stdout.String())
+	}
+
+	globalVal, ok := got["global"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing global object: %v", got)
+	}
+	if _, ok := globalVal["path"].(string); !ok {
+		t.Fatalf("global.path must be string, got: %v", globalVal["path"])
+	}
+
+	repoVal, ok := got["repo"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing repo object: %v", got)
+	}
+	if repoVal["path"] != filepath.Join("C:/repo/project", config.RepoConfigFileName) {
+		t.Fatalf("unexpected repo.path: %v", repoVal["path"])
+	}
+	if repoVal["available"] != true {
+		t.Fatalf("expected repo.available=true, got: %v", repoVal["available"])
 	}
 }
