@@ -168,8 +168,21 @@ func (o *defaultOpener) runTerminalProvider(ctx context.Context, provider, path 
 		if _, err := o.lookPath("powershell"); err != nil {
 			return fmt.Errorf("terminal provider %q is unavailable: install/enable powershell and retry", provider)
 		}
+		if _, err := o.lookPath("cmd"); err != nil {
+			return fmt.Errorf("terminal provider %q requires `cmd` to start a new terminal window", provider)
+		}
 		safePath := strings.ReplaceAll(path, "'", "''")
-		return o.run(ctx, "powershell", "-NoExit", "-Command", "Set-Location -LiteralPath '"+safePath+"'")
+		return o.run(
+			ctx,
+			"cmd",
+			"/c",
+			"start",
+			"",
+			"powershell",
+			"-NoExit",
+			"-Command",
+			"Set-Location -LiteralPath '"+safePath+"'",
+		)
 	case TerminalProviderMacTerminal:
 		if o.goos != "darwin" {
 			return fmt.Errorf("terminal provider %q is not supported on %s", provider, o.goos)

@@ -15,6 +15,7 @@ const errNoValidWorktreesForOpen = "no valid worktrees found after filtering sta
 
 func newOpenCmd(deps Dependencies) *cobra.Command {
 	var openerName string
+	var terminalProvider string
 	var windowModeRaw string
 	var targetBranch string
 	var printCD bool
@@ -34,7 +35,7 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 			if printCD && outputMode != outputModeNone {
 				return fmt.Errorf("`--print-cd` and `--output` cannot be used together. Use one mode and retry")
 			}
-			tracef(cmd.Context(), "open: branch=%q opener=%q window=%q output=%s printCD=%v noPrune=%v", targetBranch, openerName, windowModeRaw, outputMode, printCD, noPrune)
+			tracef(cmd.Context(), "open: branch=%q opener=%q terminalProvider=%q window=%q output=%s printCD=%v noPrune=%v", targetBranch, openerName, terminalProvider, windowModeRaw, outputMode, printCD, noPrune)
 
 			cfg := deps.Config.Load(cmd.Context())
 			resolvedNoPrune := noPrune
@@ -53,8 +54,15 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 			if !cmd.Flags().Changed("open") {
 				openerName = cfg.Open.Default
 			}
+			if !cmd.Flags().Changed("terminal-provider") {
+				terminalProvider = cfg.Open.TerminalProvider
+			}
 			if !cmd.Flags().Changed("window") {
 				windowModeRaw = cfg.Open.Window
+			}
+
+			if cmd.Flags().Changed("terminal-provider") && strings.ToLower(strings.TrimSpace(openerName)) != opener.KindTerminal {
+				return fmt.Errorf("`--terminal-provider` can only be used with `--open terminal`. Set `--open terminal` and retry")
 			}
 
 			if err := validateExplicitOpenerAvailability(cmd, deps.LookPath, openerName); err != nil {
@@ -93,9 +101,15 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			tracef(cmd.Context(), "open: invoking opener kind=%s path=%s window=%s", openerName, selected.Path, windowMode)
-			if err := deps.Opener.Open(cmd.Context(), openerName, selected.Path, windowMode); err != nil {
+			tracef(cmd.Context(), "open: invoking opener kind=%s terminalProvider=%s path=%s window=%s", openerName, terminalProvider, selected.Path, windowMode)
+			openResult, err := openPathWithResult(cmd.Context(), deps.Opener, openerName, selected.Path, windowMode, terminalProvider)
+			if err != nil {
 				return err
+			}
+			for _, warning := range openResult.Warnings {
+				if _, warnErr := fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", warning); warnErr != nil {
+					return fmt.Errorf("failed to write opener warning: %w", warnErr)
+				}
 			}
 			if strings.TrimSpace(afterCommand) != "" {
 				tracef(cmd.Context(), "open: running after command")
@@ -129,6 +143,7 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&openerName, "open", config.DefaultOpenKind, "opener to use: "+config.SupportedOpenKindsText)
+	cmd.Flags().StringVar(&terminalProvider, "terminal-provider", config.DefaultOpenTerminalProvider, "terminal provider: "+config.SupportedTerminalProvidersText)
 	cmd.Flags().StringVar(&windowModeRaw, "window", config.DefaultOpenWindow, "window behavior: "+config.SupportedWindowModesText)
 	cmd.Flags().StringVar(&targetBranch, "branch", "", "open worktree linked to this local branch")
 	cmd.Flags().BoolVar(&printCD, "print-cd", false, "print cd command hints for the opened worktree")

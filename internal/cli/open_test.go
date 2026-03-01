@@ -29,11 +29,13 @@ func (s *fakeSelector) Select(_ context.Context, prompt string, options []string
 }
 
 type fakeOpener struct {
-	kind   string
-	path   string
-	window openerpkg.WindowMode
-	err    error
-	call   int
+	kind             string
+	path             string
+	window           openerpkg.WindowMode
+	terminalProvider string
+	err              error
+	result           openerpkg.OpenResult
+	call             int
 }
 
 func (o *fakeOpener) Open(_ context.Context, kind string, path string, window openerpkg.WindowMode) error {
@@ -42,6 +44,22 @@ func (o *fakeOpener) Open(_ context.Context, kind string, path string, window op
 	o.path = path
 	o.window = window
 	return o.err
+}
+
+func (o *fakeOpener) OpenWithResult(_ context.Context, req openerpkg.OpenRequest) (openerpkg.OpenResult, error) {
+	o.call++
+	o.kind = req.Kind
+	o.path = req.Path
+	o.window = req.Window
+	o.terminalProvider = req.TerminalProvider
+	if o.err != nil {
+		return openerpkg.OpenResult{}, o.err
+	}
+	result := o.result
+	if strings.TrimSpace(result.Provider) == "" {
+		result.Provider = req.Kind
+	}
+	return result, nil
 }
 
 type fakeAfterRunner struct {
@@ -944,6 +962,89 @@ func TestOpenCommand_FlagOverridesConfigSkipPrune(t *testing.T) {
 
 	if gitClient.worktreePruneCall != 1 {
 		t.Fatalf("expected WorktreePrune to run once, got %d", gitClient.worktreePruneCall)
+	}
+}
+
+func TestOpenCommand_PassesTerminalProviderToOpener(t *testing.T) {
+	t.Parallel()
+
+	repoPath := toPosixPathForOpen(t.TempDir())
+	gitClient := &fakeGitClient{
+		output: "worktree " + repoPath + "\nHEAD abc\nbranch refs/heads/main\n\n",
+	}
+	openExec := &fakeOpener{}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   openExec,
+	})
+	cmd.SetArgs([]string{"open", "--open", "terminal", "--terminal-provider", "warp"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+	if openExec.kind != "terminal" {
+		t.Fatalf("unexpected opener kind: %q", openExec.kind)
+	}
+	if openExec.terminalProvider != "warp" {
+		t.Fatalf("unexpected terminal provider: %q", openExec.terminalProvider)
+	}
+}
+
+func TestOpenCommand_ReturnsErrorWhenTerminalProviderUsedWithoutTerminalOpen(t *testing.T) {
+	t.Parallel()
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+		Git: &fakeGitClient{
+			output: "worktree C:/repo\nHEAD abc\nbranch refs/heads/main\n\n",
+		},
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+	})
+	cmd.SetArgs([]string{"open", "--open", "system", "--terminal-provider", "warp"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected Execute() to return error")
+	}
+	if !strings.Contains(err.Error(), "`--terminal-provider` can only be used with `--open terminal`") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestOpenCommand_PrintsOpenerWarningsToStderr(t *testing.T) {
+	t.Parallel()
+
+	repoPath := toPosixPathForOpen(t.TempDir())
+	gitClient := &fakeGitClient{
+		output: "worktree " + repoPath + "\nHEAD abc\nbranch refs/heads/main\n\n",
+	}
+	openExec := &fakeOpener{
+		result: openerpkg.OpenResult{
+			Provider: "terminal",
+			Warnings: []string{"reuse mode is best-effort"},
+		},
+	}
+	var stderr bytes.Buffer
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &stderr,
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   openExec,
+	})
+	cmd.SetArgs([]string{"open", "--open", "terminal", "--terminal-provider", "warp"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+	if !strings.Contains(stderr.String(), "warning: reuse mode is best-effort") {
+		t.Fatalf("unexpected stderr: %s", stderr.String())
 	}
 }
 

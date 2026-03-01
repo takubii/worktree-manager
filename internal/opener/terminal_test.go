@@ -157,6 +157,40 @@ func TestOpenWithResult_TerminalUnknownProviderReturnsError(t *testing.T) {
 	}
 }
 
+func TestOpenWithResult_TerminalPowerShellStartsNewWindowViaCmd(t *testing.T) {
+	t.Parallel()
+
+	call, opener := newTerminalTestOpener("windows", map[string]bool{
+		"cmd":        true,
+		"powershell": true,
+	})
+
+	result, err := opener.OpenWithResult(context.Background(), OpenRequest{
+		Kind:             KindTerminal,
+		Path:             `C:/repo/path`,
+		Window:           WindowNew,
+		TerminalProvider: TerminalProviderPowerShell,
+	})
+	if err != nil {
+		t.Fatalf("OpenWithResult() returned error: %v", err)
+	}
+	if result.Provider != TerminalProviderPowerShell {
+		t.Fatalf("unexpected provider: %q", result.Provider)
+	}
+	if call.name != "cmd" {
+		t.Fatalf("unexpected command: %q", call.name)
+	}
+	wantPrefix := []string{"/c", "start", "", "powershell", "-NoExit", "-Command"}
+	if len(call.args) < len(wantPrefix) {
+		t.Fatalf("unexpected args: %v", call.args)
+	}
+	for i, want := range wantPrefix {
+		if call.args[i] != want {
+			t.Fatalf("unexpected arg at %d: want=%q got=%q", i, want, call.args[i])
+		}
+	}
+}
+
 func newTerminalTestOpener(goos string, commandExists map[string]bool) (*terminalCall, *defaultOpener) {
 	call := &terminalCall{}
 	o := &defaultOpener{

@@ -897,6 +897,98 @@ func TestNewCommand_FlagsOverrideConfigSkipSettings(t *testing.T) {
 	}
 }
 
+func TestNewCommand_PassesTerminalProviderToOpener(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := createTestRepoRoot(t)
+	gitClient := &fakeGitClient{
+		repoRoot:       repoRoot,
+		localBranches:  []string{"main", "feature/local"},
+		remoteBranches: []string{"origin/main"},
+	}
+	openExec := &fakeOpener{}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   openExec,
+	})
+	cmd.SetArgs([]string{"new", "feature/local", "--open", "terminal", "--terminal-provider", "warp"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+	if openExec.kind != "terminal" {
+		t.Fatalf("unexpected opener kind: %q", openExec.kind)
+	}
+	if openExec.terminalProvider != "warp" {
+		t.Fatalf("unexpected terminal provider: %q", openExec.terminalProvider)
+	}
+}
+
+func TestNewCommand_ReturnsErrorWhenTerminalProviderUsedWithoutTerminalOpen(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := createTestRepoRoot(t)
+	gitClient := &fakeGitClient{
+		repoRoot:       repoRoot,
+		localBranches:  []string{"main", "feature/local"},
+		remoteBranches: []string{"origin/main"},
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+	})
+	cmd.SetArgs([]string{"new", "feature/local", "--open", "none", "--terminal-provider", "warp"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected Execute() to return error")
+	}
+	if !strings.Contains(err.Error(), "`--terminal-provider` can only be used with `--open terminal`") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestNewCommand_PrintsOpenerWarningsToStderr(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := createTestRepoRoot(t)
+	gitClient := &fakeGitClient{
+		repoRoot:       repoRoot,
+		localBranches:  []string{"main", "feature/local"},
+		remoteBranches: []string{"origin/main"},
+	}
+	openExec := &fakeOpener{
+		result: openerpkg.OpenResult{
+			Provider: "terminal",
+			Warnings: []string{"reuse mode is best-effort"},
+		},
+	}
+	var stderr bytes.Buffer
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &stderr,
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   openExec,
+	})
+	cmd.SetArgs([]string{"new", "feature/local", "--open", "terminal", "--terminal-provider", "warp"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+	if !strings.Contains(stderr.String(), "warning: reuse mode is best-effort") {
+		t.Fatalf("unexpected stderr: %s", stderr.String())
+	}
+}
+
 func createTestRepoRoot(t *testing.T) string {
 	t.Helper()
 

@@ -28,6 +28,7 @@ type branchCandidate struct {
 func newNewCmd(deps Dependencies) *cobra.Command {
 	var baseBranch string
 	var openerName string
+	var terminalProvider string
 	var noFetch bool
 	var noPrune bool
 	var outputRaw string
@@ -41,7 +42,7 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			tracef(cmd.Context(), "new: opener=%q output=%s base=%q noFetch=%v noPrune=%v", openerName, outputMode, baseBranch, noFetch, noPrune)
+			tracef(cmd.Context(), "new: opener=%q terminalProvider=%q output=%s base=%q noFetch=%v noPrune=%v", openerName, terminalProvider, outputMode, baseBranch, noFetch, noPrune)
 
 			cfg := deps.Config.Load(cmd.Context())
 			resolvedNoPrune := noPrune
@@ -76,6 +77,13 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 			}
 
 			resolvedOpener := strings.ToLower(strings.TrimSpace(openerName))
+			resolvedTerminalProvider := strings.ToLower(strings.TrimSpace(terminalProvider))
+			if !cmd.Flags().Changed("terminal-provider") {
+				resolvedTerminalProvider = cfg.Open.TerminalProvider
+			}
+			if cmd.Flags().Changed("terminal-provider") && resolvedOpener != opener.KindTerminal {
+				return fmt.Errorf("`--terminal-provider` can only be used with `--open terminal`. Set `--open terminal` and retry")
+			}
 			if resolvedOpener != newOpenNone {
 				if err := validateExplicitOpenerAvailability(cmd, deps.LookPath, resolvedOpener); err != nil {
 					return err
@@ -153,9 +161,15 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 					return fmt.Errorf("invalid config open.window value: %w", err)
 				}
 
-				tracef(cmd.Context(), "new: invoking opener kind=%s path=%s window=%s", resolvedOpener, worktreePath, windowMode)
-				if err := deps.Opener.Open(cmd.Context(), resolvedOpener, worktreePath, windowMode); err != nil {
+				tracef(cmd.Context(), "new: invoking opener kind=%s terminalProvider=%s path=%s window=%s", resolvedOpener, resolvedTerminalProvider, worktreePath, windowMode)
+				openResult, err := openPathWithResult(cmd.Context(), deps.Opener, resolvedOpener, worktreePath, windowMode, resolvedTerminalProvider)
+				if err != nil {
 					return err
+				}
+				for _, warning := range openResult.Warnings {
+					if _, warnErr := fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", warning); warnErr != nil {
+						return fmt.Errorf("failed to write opener warning: %w", warnErr)
+					}
 				}
 				opened = true
 			}
@@ -172,6 +186,7 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 
 	cmd.Flags().StringVar(&baseBranch, "base", defaultBaseBranch, "base branch used when creating a new branch")
 	cmd.Flags().StringVar(&openerName, "open", newOpenNone, "opener to use after creation: none|"+config.SupportedOpenKindsText)
+	cmd.Flags().StringVar(&terminalProvider, "terminal-provider", config.DefaultOpenTerminalProvider, "terminal provider: "+config.SupportedTerminalProvidersText)
 	cmd.Flags().BoolVar(&noFetch, "no-fetch", false, "skip running git fetch <remote> --prune before branch resolution")
 	cmd.Flags().BoolVar(&noPrune, "no-prune", false, "skip running git worktree prune --expire now before processing")
 	cmd.Flags().StringVar(&outputRaw, "output", string(outputModeNone), "output mode: "+supportedOutputModesText)
