@@ -15,11 +15,31 @@ type execCommandFunc func(ctx context.Context, name string, args ...string) *exe
 type lookPathFunc func(file string) (string, error)
 
 const (
-	KindSystem = "system"
-	KindVSCode = "vscode"
-	KindCursor = "cursor"
-	KindVim    = "vim"
-	KindCustom = "custom"
+	KindSystem   = "system"
+	KindVSCode   = "vscode"
+	KindCursor   = "cursor"
+	KindVim      = "vim"
+	KindTerminal = "terminal"
+	KindCustom   = "custom"
+)
+
+const (
+	TerminalProviderAuto            = "auto"
+	TerminalProviderWindowsTerminal = "windows-terminal"
+	TerminalProviderCMD             = "cmd"
+	TerminalProviderPowerShell      = "powershell"
+	TerminalProviderMacTerminal     = "terminal"
+	TerminalProviderGNOMETerminal   = "gnome-terminal"
+	TerminalProviderWezTerm         = "wezterm"
+	TerminalProviderITerm2          = "iterm2"
+	TerminalProviderGhostty         = "ghostty"
+	TerminalProviderWarp            = "warp"
+	TerminalProviderTabby           = "tabby"
+)
+
+const (
+	terminalProviderXTerminalEmulator = "x-terminal-emulator"
+	terminalProviderXTerm             = "xterm"
 )
 
 // WindowMode controls whether opener should prefer a new or reused window.
@@ -33,6 +53,20 @@ const (
 // Opener opens a path with a selected tool.
 type Opener interface {
 	Open(ctx context.Context, kind string, path string, window WindowMode) error
+}
+
+// OpenRequest contains opener execution parameters.
+type OpenRequest struct {
+	Kind             string
+	Path             string
+	Window           WindowMode
+	TerminalProvider string
+}
+
+// OpenResult contains opener execution details.
+type OpenResult struct {
+	Provider string
+	Warnings []string
 }
 
 type defaultOpener struct {
@@ -51,24 +85,50 @@ func NewDefault() Opener {
 }
 
 func (o *defaultOpener) Open(ctx context.Context, kind string, path string, window WindowMode) error {
+	_, err := o.OpenWithResult(ctx, OpenRequest{
+		Kind:             kind,
+		Path:             path,
+		Window:           window,
+		TerminalProvider: TerminalProviderAuto,
+	})
+	return err
+}
+
+// OpenWithResult opens a path and returns provider metadata and warnings.
+func (o *defaultOpener) OpenWithResult(ctx context.Context, req OpenRequest) (OpenResult, error) {
+	path := req.Path
 	path = o.normalizePath(path)
 
-	normalized := strings.ToLower(strings.TrimSpace(kind))
+	normalized := strings.ToLower(strings.TrimSpace(req.Kind))
 	if normalized == "" {
 		normalized = KindSystem
 	}
 
 	switch normalized {
 	case KindSystem:
-		return o.openSystem(ctx, path, window)
+		if err := o.openSystem(ctx, path, req.Window); err != nil {
+			return OpenResult{}, err
+		}
+		return OpenResult{Provider: KindSystem}, nil
 	case KindVSCode:
-		return o.openVSCode(ctx, path, window)
+		if err := o.openVSCode(ctx, path, req.Window); err != nil {
+			return OpenResult{}, err
+		}
+		return OpenResult{Provider: KindVSCode}, nil
 	case KindCursor:
-		return o.openCursor(ctx, path, window)
+		if err := o.openCursor(ctx, path, req.Window); err != nil {
+			return OpenResult{}, err
+		}
+		return OpenResult{Provider: KindCursor}, nil
 	case KindVim:
-		return o.openVim(ctx, path, window)
+		if err := o.openVim(ctx, path, req.Window); err != nil {
+			return OpenResult{}, err
+		}
+		return OpenResult{Provider: KindVim}, nil
+	case KindTerminal:
+		return o.openTerminal(ctx, path, req.Window, req.TerminalProvider)
 	default:
-		return fmt.Errorf("unknown opener %q. Use one of: system, vscode, cursor, vim", kind)
+		return OpenResult{}, fmt.Errorf("unknown opener %q. Use one of: system, vscode, cursor, vim, terminal", req.Kind)
 	}
 }
 
@@ -92,7 +152,14 @@ func (o *defaultOpener) openSystem(ctx context.Context, path string, window Wind
 }
 
 func (o *defaultOpener) run(ctx context.Context, name string, args ...string) error {
+	return o.runInDir(ctx, "", name, args...)
+}
+
+func (o *defaultOpener) runInDir(ctx context.Context, dir string, name string, args ...string) error {
 	cmd := o.execCommand(ctx, name, args...)
+	if strings.TrimSpace(dir) != "" {
+		cmd.Dir = dir
+	}
 	if err := cmd.Run(); err != nil {
 		command := strings.TrimSpace(name)
 		if len(args) > 0 {
