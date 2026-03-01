@@ -3,26 +3,66 @@ package git
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 )
 
 func (c *execClient) RepoRoot(ctx context.Context) (string, error) {
-	stdout, stderr, err := c.runGit(ctx, "rev-parse", "--show-toplevel")
+	stdout, stderr, err := c.runGit(ctx, "rev-parse", "--show-toplevel", "--git-common-dir")
 	if err != nil {
 		return "", buildGitCommandError(
 			err,
 			stderr,
-			"rev-parse --show-toplevel",
+			"rev-parse --show-toplevel --git-common-dir",
 			"Run this command inside a Git repository, then retry",
 		)
 	}
 
-	repoRoot := strings.TrimSpace(stdout)
+	lines := parseBranchLines(stdout)
+	if len(lines) == 0 {
+		return "", fmt.Errorf("failed to detect repository root. Run this command inside a Git repository, then retry")
+	}
+
+	repoRoot := strings.TrimSpace(lines[0])
 	if repoRoot == "" {
 		return "", fmt.Errorf("failed to detect repository root. Run this command inside a Git repository, then retry")
 	}
 
+	if len(lines) >= 2 {
+		commonDir := strings.TrimSpace(lines[1])
+		if canonical := canonicalRepoRootFromCommonDir(commonDir); canonical != "" {
+			return canonical, nil
+		}
+	}
+
 	return repoRoot, nil
+}
+
+func canonicalRepoRootFromCommonDir(commonDir string) string {
+	commonDir = strings.TrimSpace(commonDir)
+	if commonDir == "" {
+		return ""
+	}
+
+	if !filepath.IsAbs(commonDir) {
+		abs, err := filepath.Abs(commonDir)
+		if err != nil {
+			return ""
+		}
+		commonDir = abs
+	}
+
+	commonDir = filepath.ToSlash(filepath.Clean(commonDir))
+	if !strings.HasSuffix(commonDir, "/.git") {
+		return ""
+	}
+
+	canonical := strings.TrimSuffix(commonDir, "/.git")
+	if strings.TrimSpace(canonical) == "" {
+		return ""
+	}
+
+	return canonical
 }
 
 func (c *execClient) FetchPrune(ctx context.Context, remote string) error {

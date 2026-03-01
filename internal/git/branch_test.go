@@ -34,12 +34,73 @@ func TestExecClientRepoRoot_RunsExpectedCommand(t *testing.T) {
 	if gotName != "git" {
 		t.Fatalf("expected command name git, got %q", gotName)
 	}
-	expectedArgs := []string{"rev-parse", "--show-toplevel"}
+	expectedArgs := []string{"rev-parse", "--show-toplevel", "--git-common-dir"}
 	if !reflect.DeepEqual(gotArgs, expectedArgs) {
 		t.Fatalf("unexpected args: want=%v got=%v", expectedArgs, gotArgs)
 	}
 	if root != "C:/repo/project" {
 		t.Fatalf("unexpected repo root: %q", root)
+	}
+}
+
+func TestExecClientRepoRoot_UsesCanonicalRootFromGitCommonDir(t *testing.T) {
+	t.Parallel()
+
+	client := newExecClient(func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+		cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=TestHelperProcess", "--")
+		cmd.Env = append(
+			os.Environ(),
+			"GO_WANT_HELPER_PROCESS=1",
+			"HELPER_STDOUT=C:/Work/Repos/worktrees/feature/test2\nC:/Work/Repos/git-worktree-opener/.git\n",
+		)
+		return cmd
+	})
+
+	root, err := client.RepoRoot(context.Background())
+	if err != nil {
+		t.Fatalf("RepoRoot() returned error: %v", err)
+	}
+
+	if root != "C:/Work/Repos/git-worktree-opener" {
+		t.Fatalf("unexpected canonical repo root: %q", root)
+	}
+}
+
+func TestCanonicalRepoRootFromCommonDir(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		commonDir string
+		want      string
+	}{
+		{
+			name:      "canonical .git directory",
+			commonDir: "C:/repo/project/.git",
+			want:      "C:/repo/project",
+		},
+		{
+			name:      "non canonical common dir",
+			commonDir: "C:/repo/.git/modules/submodule",
+			want:      "",
+		},
+		{
+			name:      "empty",
+			commonDir: "   ",
+			want:      "",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := canonicalRepoRootFromCommonDir(tc.commonDir)
+			if got != tc.want {
+				t.Fatalf("canonicalRepoRootFromCommonDir(%q) = %q, want %q", tc.commonDir, got, tc.want)
+			}
+		})
 	}
 }
 
