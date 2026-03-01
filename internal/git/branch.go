@@ -3,6 +3,7 @@ package git
 import (
 	"context"
 	"fmt"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -44,15 +45,17 @@ func canonicalRepoRootFromCommonDir(commonDir string) string {
 		return ""
 	}
 
-	if !filepath.IsAbs(commonDir) {
+	commonDir = strings.ReplaceAll(commonDir, "\\", "/")
+
+	if !isWindowsAbsolutePath(commonDir) && !filepath.IsAbs(commonDir) {
 		abs, err := filepath.Abs(commonDir)
 		if err != nil {
 			return ""
 		}
-		commonDir = abs
+		commonDir = filepath.ToSlash(abs)
 	}
 
-	commonDir = filepath.ToSlash(filepath.Clean(commonDir))
+	commonDir = path.Clean(commonDir)
 	if !strings.HasSuffix(commonDir, "/.git") {
 		return ""
 	}
@@ -63,6 +66,23 @@ func canonicalRepoRootFromCommonDir(commonDir string) string {
 	}
 
 	return canonical
+}
+
+func isWindowsAbsolutePath(p string) bool {
+	if len(p) < 3 {
+		return false
+	}
+
+	drive := p[0]
+	if (drive < 'a' || drive > 'z') && (drive < 'A' || drive > 'Z') {
+		return false
+	}
+
+	if p[1] != ':' {
+		return false
+	}
+
+	return p[2] == '/' || p[2] == '\\'
 }
 
 func (c *execClient) FetchPrune(ctx context.Context, remote string) error {
