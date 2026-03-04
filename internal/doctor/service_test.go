@@ -215,6 +215,152 @@ func TestServiceRun_ConfiguredTerminalProviderMissingWarns(t *testing.T) {
 	}
 }
 
+func TestServiceRun_LinuxGUISessionWarnsWhenTerminalDefaultIsConfigured(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.DefaultConfig()
+	cfg.Open.Default = config.OpenKindTerminal
+	cfg.Open.TerminalProvider = config.TerminalProviderGNOMETerminal
+
+	svc := NewService(Options{
+		LookPath: func(file string) (string, error) {
+			if file == "git" || file == "curl" || file == "gnome-terminal" {
+				return "ok", nil
+			}
+			return "", errors.New("not found")
+		},
+		Git:            fakeRepoRootFinder{err: errors.New("not in repo")},
+		ConfigProvider: config.NewStaticProvider(cfg),
+		GetEnv: func(string) string {
+			return ""
+		},
+		GOOS: "linux",
+	})
+
+	report := svc.Run(context.Background())
+	result, ok := findResult(report.Results, "terminal/linux-gui-session")
+	if !ok {
+		t.Fatal("expected terminal/linux-gui-session result")
+	}
+	if result.Level != LevelWarn {
+		t.Fatalf("expected WARN, got %s", result.Level)
+	}
+	if !strings.Contains(result.Message, "not detected") {
+		t.Fatalf("unexpected message: %s", result.Message)
+	}
+}
+
+func TestServiceRun_WSL2BridgeWarnsWhenConfiguredAndMissing(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.DefaultConfig()
+	cfg.Open.Default = config.OpenKindTerminal
+	cfg.Open.TerminalProvider = config.TerminalProviderAuto
+
+	svc := NewService(Options{
+		LookPath: func(file string) (string, error) {
+			if file == "git" || file == "curl" {
+				return "ok", nil
+			}
+			return "", errors.New("not found")
+		},
+		Git:            fakeRepoRootFinder{err: errors.New("not in repo")},
+		ConfigProvider: config.NewStaticProvider(cfg),
+		GetEnv: func(key string) string {
+			if key == "WSL_INTEROP" {
+				return "/run/WSL/123.sock"
+			}
+			return ""
+		},
+		GOOS: "linux",
+	})
+
+	report := svc.Run(context.Background())
+	result, ok := findResult(report.Results, "terminal/wsl2-bridge")
+	if !ok {
+		t.Fatal("expected terminal/wsl2-bridge result")
+	}
+	if result.Level != LevelWarn {
+		t.Fatalf("expected WARN, got %s", result.Level)
+	}
+	if !strings.Contains(result.Message, "wt.exe") || !strings.Contains(result.Message, "wsl.exe") {
+		t.Fatalf("unexpected message: %s", result.Message)
+	}
+}
+
+func TestServiceRun_WSL2BridgeOkWhenCommandsAreAvailable(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.DefaultConfig()
+	cfg.Open.Default = config.OpenKindTerminal
+	cfg.Open.TerminalProvider = config.TerminalProviderAuto
+
+	svc := NewService(Options{
+		LookPath: func(file string) (string, error) {
+			if file == "git" || file == "curl" || file == "wt.exe" || file == "wsl.exe" {
+				return "ok", nil
+			}
+			return "", errors.New("not found")
+		},
+		Git:            fakeRepoRootFinder{err: errors.New("not in repo")},
+		ConfigProvider: config.NewStaticProvider(cfg),
+		GetEnv: func(key string) string {
+			if key == "WSL_INTEROP" {
+				return "/run/WSL/123.sock"
+			}
+			return ""
+		},
+		GOOS: "linux",
+	})
+
+	report := svc.Run(context.Background())
+	result, ok := findResult(report.Results, "terminal/wsl2-bridge")
+	if !ok {
+		t.Fatal("expected terminal/wsl2-bridge result")
+	}
+	if result.Level != LevelOK {
+		t.Fatalf("expected OK, got %s", result.Level)
+	}
+}
+
+func TestServiceRun_WindowsTerminalProviderIsApplicableOnWSL2(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.DefaultConfig()
+	cfg.Open.Default = config.OpenKindTerminal
+	cfg.Open.TerminalProvider = config.TerminalProviderWindowsTerminal
+
+	svc := NewService(Options{
+		LookPath: func(file string) (string, error) {
+			if file == "git" || file == "curl" || file == "wt.exe" || file == "wsl.exe" {
+				return "ok", nil
+			}
+			return "", errors.New("not found")
+		},
+		Git:            fakeRepoRootFinder{err: errors.New("not in repo")},
+		ConfigProvider: config.NewStaticProvider(cfg),
+		GetEnv: func(key string) string {
+			if key == "WSL_DISTRO_NAME" {
+				return "Ubuntu"
+			}
+			return ""
+		},
+		GOOS: "linux",
+	})
+
+	report := svc.Run(context.Background())
+	result, ok := findResult(report.Results, "terminal/windows-terminal")
+	if !ok {
+		t.Fatal("expected terminal/windows-terminal result")
+	}
+	if result.Level != LevelOK {
+		t.Fatalf("expected OK, got %s", result.Level)
+	}
+	if strings.Contains(strings.ToLower(result.Message), "not applicable") {
+		t.Fatalf("unexpected message: %s", result.Message)
+	}
+}
+
 func findResult(results []Result, name string) (Result, bool) {
 	for _, r := range results {
 		if r.Name == name {

@@ -3,6 +3,7 @@ package opener
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -82,6 +83,7 @@ type OpenResult struct {
 
 type defaultOpener struct {
 	goos        string
+	getEnv      func(key string) string
 	lookPath    lookPathFunc
 	execCommand execCommandFunc
 }
@@ -90,6 +92,7 @@ type defaultOpener struct {
 func NewDefault() Opener {
 	return &defaultOpener{
 		goos:        runtime.GOOS,
+		getEnv:      os.Getenv,
 		lookPath:    exec.LookPath,
 		execCommand: exec.CommandContext,
 	}
@@ -138,7 +141,7 @@ func (o *defaultOpener) OpenWithResult(ctx context.Context, req OpenRequest) (Op
 		}
 		return OpenResult{Provider: KindVim}, nil
 	case KindTerminal:
-		return o.openTerminal(ctx, path, req.Window, req.TerminalProvider)
+		return o.openTerminal(ctx, path, req.Window, req.TerminalProvider, req.TmuxMode)
 	default:
 		return OpenResult{}, fmt.Errorf("unknown opener %q. Use one of: system, vscode, cursor, vim, terminal", req.Kind)
 	}

@@ -23,6 +23,7 @@ type Options struct {
 	UserConfigDir  func() (string, error)
 	ReadFile       func(path string) ([]byte, error)
 	Stat           func(name string) (os.FileInfo, error)
+	GetEnv         func(key string) string
 	GOOS           string
 }
 
@@ -33,6 +34,7 @@ type service struct {
 	userConfigDir  func() (string, error)
 	readFile       func(path string) ([]byte, error)
 	stat           func(name string) (os.FileInfo, error)
+	getEnv         func(key string) string
 	goos           string
 }
 
@@ -47,6 +49,9 @@ func NewService(opts Options) Service {
 	if opts.Stat == nil {
 		opts.Stat = os.Stat
 	}
+	if opts.GetEnv == nil {
+		opts.GetEnv = os.Getenv
+	}
 	if strings.TrimSpace(opts.GOOS) == "" {
 		opts.GOOS = runtime.GOOS
 	}
@@ -58,6 +63,7 @@ func NewService(opts Options) Service {
 		userConfigDir:  opts.UserConfigDir,
 		readFile:       opts.ReadFile,
 		stat:           opts.Stat,
+		getEnv:         opts.GetEnv,
 		goos:           strings.TrimSpace(opts.GOOS),
 	}
 }
@@ -95,10 +101,11 @@ func (s *service) Run(ctx context.Context) Report {
 	}
 
 	repoRoot, repoErr := s.repoRoot(ctx, gitOK)
-	selectedTerminalProvider := s.selectedTerminalProvider(ctx)
+	terminalSelection := s.selectedTerminalSelection(ctx)
 	results = append(results, s.repoResult(repoRoot, repoErr)...)
 	results = append(results, s.openerResults()...)
-	results = append(results, s.terminalProviderResults(selectedTerminalProvider)...)
+	results = append(results, s.terminalProviderResults(terminalSelection.Provider)...)
+	results = append(results, s.terminalRuntimeResults(terminalSelection)...)
 	results = append(results, s.configResults(repoRoot, repoErr)...)
 	results = append(results, s.updatePrerequisiteResult()...)
 
@@ -108,35 +115,44 @@ func (s *service) Run(ctx context.Context) Report {
 	}
 }
 
-func (s *service) selectedTerminalProvider(ctx context.Context) string {
+type terminalSelection struct {
+	Enabled  bool
+	Provider string
+}
+
+func (s *service) selectedTerminalSelection(ctx context.Context) terminalSelection {
 	if s.configProvider == nil {
-		return ""
+		return terminalSelection{}
 	}
 
 	cfg := s.configProvider.Load(ctx)
 	openDefault := strings.ToLower(strings.TrimSpace(cfg.Open.Default))
 	if openDefault != config.OpenKindTerminal {
-		return ""
+		return terminalSelection{}
 	}
 
 	provider := strings.ToLower(strings.TrimSpace(cfg.Open.TerminalProvider))
-	if provider == "" || provider == config.TerminalProviderAuto {
-		return ""
+	if provider == "" {
+		provider = config.TerminalProviderAuto
 	}
 
-	return provider
+	return terminalSelection{
+		Enabled:  true,
+		Provider: provider,
+	}
 }
 
 type terminalProviderCheck struct {
 	Provider string
 	Command  string
 	OnlyOS   string
+	AllowWSL bool
 	AppPaths []string
 }
 
 func (s *service) terminalProviderResults(selectedProvider string) []Result {
 	checks := []terminalProviderCheck{
-		{Provider: config.TerminalProviderWindowsTerminal, Command: "wt", OnlyOS: "windows"},
+		{Provider: config.TerminalProviderWindowsTerminal, Command: "wt", OnlyOS: "windows", AllowWSL: true},
 		{Provider: config.TerminalProviderCMD, Command: "cmd", OnlyOS: "windows"},
 		{Provider: config.TerminalProviderPowerShell, Command: "powershell", OnlyOS: "windows"},
 		{
@@ -184,7 +200,7 @@ func (s *service) terminalProviderResults(selectedProvider string) []Result {
 	results := make([]Result, 0, len(checks))
 	for _, check := range checks {
 		name := "terminal/" + check.Provider
-		if check.OnlyOS != "" && check.OnlyOS != s.goos {
+		if !s.isTerminalProviderApplicable(check) {
 			level := LevelOK
 			message := fmt.Sprintf("provider is not applicable on %s (optional)", s.goos)
 			nextAction := "no action required"
@@ -233,13 +249,181 @@ func (s *service) terminalProviderResults(selectedProvider string) []Result {
 	return results
 }
 
+func (s *service) terminalRuntimeResults(selection terminalSelection) []Result {
+	return []Result{
+		s.linuxGUISessionResult(selection),
+		s.wsl2BridgeResult(selection),
+	}
+}
+
+func (s *service) linuxGUISessionResult(selection terminalSelection) Result {
+	if s.goos != "linux" {
+		return Result{
+			Name:       "terminal/linux-gui-session",
+			Level:      LevelOK,
+			Message:    fmt.Sprintf("check is not applicable on %s (optional)", s.goos),
+			NextAction: "no action required",
+		}
+	}
+
+	if s.hasLinuxGUISession() {
+		return Result{
+			Name:       "terminal/linux-gui-session",
+			Level:      LevelOK,
+			Message:    "Linux GUI session is available (`DISPLAY` or `WAYLAND_DISPLAY` is set)",
+			NextAction: "no action required",
+		}
+	}
+
+	if !selection.Enabled {
+		return Result{
+			Name:       "terminal/linux-gui-session",
+			Level:      LevelOK,
+			Message:    "Linux GUI session is not detected (optional)",
+			NextAction: "no action required",
+		}
+	}
+
+	provider := strings.ToLower(strings.TrimSpace(selection.Provider))
+	if s.isWSL2() && terminalProviderCanUseWSLBridge(provider) {
+		return Result{
+			Name:       "terminal/linux-gui-session",
+			Level:      LevelOK,
+			Message:    "Linux GUI session is not detected, but WSL2 Windows Terminal bridge can be used",
+			NextAction: "ensure `wt.exe` is available for bridge mode, or enable WSLg/X11 for Linux GUI terminals",
+		}
+	}
+
+	return Result{
+		Name:       "terminal/linux-gui-session",
+		Level:      LevelWarn,
+		Message:    "Linux GUI session is not detected (`DISPLAY`/`WAYLAND_DISPLAY` are empty)",
+		NextAction: "start a Linux GUI terminal session, or use `wto enter --shell` / `wto enter --print-cd`",
+	}
+}
+
+func (s *service) wsl2BridgeResult(selection terminalSelection) Result {
+	if s.goos != "linux" {
+		return Result{
+			Name:       "terminal/wsl2-bridge",
+			Level:      LevelOK,
+			Message:    fmt.Sprintf("check is not applicable on %s (optional)", s.goos),
+			NextAction: "no action required",
+		}
+	}
+
+	if !s.isWSL2() {
+		return Result{
+			Name:       "terminal/wsl2-bridge",
+			Level:      LevelOK,
+			Message:    "WSL2 bridge check is not applicable outside WSL2 (optional)",
+			NextAction: "no action required",
+		}
+	}
+
+	bridgeRequired := selection.Enabled && terminalProviderCanUseWSLBridge(selection.Provider)
+	if s.lookPath == nil {
+		if bridgeRequired {
+			return Result{
+				Name:       "terminal/wsl2-bridge",
+				Level:      LevelWarn,
+				Message:    "cannot verify WSL2 bridge commands because lookPath is not configured",
+				NextAction: "configure lookPath dependency, then run `wto doctor` again",
+			}
+		}
+		return Result{
+			Name:       "terminal/wsl2-bridge",
+			Level:      LevelOK,
+			Message:    "WSL2 bridge commands were not checked (optional): lookPath is not configured",
+			NextAction: "no action required",
+		}
+	}
+
+	missing := make([]string, 0, 2)
+	for _, cmd := range []string{"wt.exe", "wsl.exe"} {
+		if _, err := s.lookPath(cmd); err != nil {
+			missing = append(missing, cmd)
+		}
+	}
+	if len(missing) == 0 {
+		return Result{
+			Name:       "terminal/wsl2-bridge",
+			Level:      LevelOK,
+			Message:    "WSL2 bridge commands are available (`wt.exe`, `wsl.exe`)",
+			NextAction: "no action required",
+		}
+	}
+
+	message := fmt.Sprintf("WSL2 bridge commands are missing (optional): %s", strings.Join(missing, ", "))
+	nextAction := "no action required"
+	level := LevelOK
+	if bridgeRequired {
+		level = LevelWarn
+		message = fmt.Sprintf("WSL2 bridge commands are missing: %s", strings.Join(missing, ", "))
+		nextAction = "install Windows Terminal and ensure both `wt.exe` and `wsl.exe` are available in WSL2 PATH"
+	}
+
+	return Result{
+		Name:       "terminal/wsl2-bridge",
+		Level:      level,
+		Message:    message,
+		NextAction: nextAction,
+	}
+}
+
+func terminalProviderCanUseWSLBridge(provider string) bool {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "", config.TerminalProviderAuto, config.TerminalProviderWindowsTerminal:
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *service) isTerminalProviderApplicable(check terminalProviderCheck) bool {
+	if check.Provider == config.TerminalProviderWindowsTerminal {
+		if s.goos == "windows" {
+			return true
+		}
+		return check.AllowWSL && s.goos == "linux" && s.isWSL2()
+	}
+
+	if check.OnlyOS == "" {
+		return true
+	}
+	return check.OnlyOS == s.goos
+}
+
+func (s *service) isWSL2() bool {
+	if s.goos != "linux" {
+		return false
+	}
+	return strings.TrimSpace(s.env("WSL_INTEROP")) != "" || strings.TrimSpace(s.env("WSL_DISTRO_NAME")) != ""
+}
+
+func (s *service) hasLinuxGUISession() bool {
+	return strings.TrimSpace(s.env("DISPLAY")) != "" || strings.TrimSpace(s.env("WAYLAND_DISPLAY")) != ""
+}
+
+func (s *service) env(key string) string {
+	if s.getEnv == nil {
+		return ""
+	}
+	return s.getEnv(key)
+}
+
 func (s *service) isTerminalProviderAvailable(check terminalProviderCheck) (bool, string) {
 	if s.lookPath == nil {
 		return false, "lookPath is not configured"
 	}
 
+	command := check.Command
+	if check.Provider == config.TerminalProviderWindowsTerminal && s.goos == "linux" && s.isWSL2() {
+		command = "wt.exe"
+	}
+
 	if check.Command != "" {
-		if _, err := s.lookPath(check.Command); err == nil {
+		if _, err := s.lookPath(command); err == nil {
 			return true, "command is available"
 		}
 	}
@@ -253,8 +437,8 @@ func (s *service) isTerminalProviderAvailable(check terminalProviderCheck) (bool
 		}
 	}
 
-	if check.Command != "" {
-		return false, fmt.Sprintf("command `%s` was not found in PATH", check.Command)
+	if command != "" {
+		return false, fmt.Sprintf("command `%s` was not found in PATH", command)
 	}
 
 	return false, "provider command is unknown"
