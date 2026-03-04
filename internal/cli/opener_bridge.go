@@ -18,6 +18,7 @@ func openPathWithResult(
 	path string,
 	window opener.WindowMode,
 	terminalProvider string,
+	tmuxMode opener.TmuxMode,
 ) (opener.OpenResult, error) {
 	if withResult, ok := openr.(openerWithResult); ok {
 		return withResult.OpenWithResult(ctx, opener.OpenRequest{
@@ -25,6 +26,7 @@ func openPathWithResult(
 			Path:             path,
 			Window:           window,
 			TerminalProvider: terminalProvider,
+			TmuxMode:         tmuxMode,
 		})
 	}
 

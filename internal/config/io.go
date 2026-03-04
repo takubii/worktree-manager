@@ -14,6 +14,7 @@ type rawConfig struct {
 	WorktreeDirTemplate *string  `json:"worktreeDirTemplate"`
 	New                 *rawNew  `json:"new"`
 	Open                *rawOpen `json:"open"`
+	Tmux                *rawTmux `json:"tmux"`
 	RM                  *rawRM   `json:"rm"`
 }
 
@@ -27,6 +28,10 @@ type rawOpen struct {
 	Window           *string `json:"window"`
 	Prune            *bool   `json:"prune"`
 	TerminalProvider *string `json:"terminalProvider"`
+}
+
+type rawTmux struct {
+	Mode *string `json:"mode"`
 }
 
 type rawRM struct {

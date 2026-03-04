@@ -145,3 +145,51 @@ func TestMergeConfig_AppliesOpenTerminalProviderOverride(t *testing.T) {
 		t.Fatalf("unexpected open.terminalProvider: %q", got.Open.TerminalProvider)
 	}
 }
+
+func TestNormalizeOverride_ReadsTmuxMode(t *testing.T) {
+	t.Parallel()
+
+	mode := TmuxModeSplit
+	override, err := normalizeOverride(rawConfig{
+		Tmux: &rawTmux{
+			Mode: &mode,
+		},
+	})
+	if err != nil {
+		t.Fatalf("normalizeOverride() returned error: %v", err)
+	}
+
+	if override.TmuxMode == nil || *override.TmuxMode != TmuxModeSplit {
+		t.Fatalf("unexpected TmuxMode override: %+v", override.TmuxMode)
+	}
+}
+
+func TestNormalizeOverride_ReturnsErrorForInvalidTmuxMode(t *testing.T) {
+	t.Parallel()
+
+	mode := "invalid-mode"
+	_, err := normalizeOverride(rawConfig{
+		Tmux: &rawTmux{
+			Mode: &mode,
+		},
+	})
+	if err == nil {
+		t.Fatal("expected normalizeOverride() to return error")
+	}
+	if !strings.Contains(err.Error(), "tmux.mode") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestMergeConfig_AppliesTmuxModeOverride(t *testing.T) {
+	t.Parallel()
+
+	mode := TmuxModeWindow
+	got := mergeConfig(DefaultConfig(), configOverride{
+		TmuxMode: &mode,
+	})
+
+	if got.Tmux.Mode != TmuxModeWindow {
+		t.Fatalf("unexpected tmux.mode: %q", got.Tmux.Mode)
+	}
+}

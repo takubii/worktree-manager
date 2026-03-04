@@ -9,6 +9,7 @@ type Config struct {
 	WorktreeDirTemplate string `json:"worktreeDirTemplate"`
 	New                 New    `json:"new"`
 	Open                Open   `json:"open"`
+	Tmux                Tmux   `json:"tmux"`
 	RM                  RM     `json:"rm"`
 }
 
@@ -24,6 +25,11 @@ type Open struct {
 	Window           string `json:"window"`
 	Prune            bool   `json:"prune"`
 	TerminalProvider string `json:"terminalProvider"`
+}
+
+// Tmux stores tmux optimization defaults.
+type Tmux struct {
+	Mode string `json:"mode"`
 }
 
 // RM stores removal defaults.

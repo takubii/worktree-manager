@@ -11,6 +11,8 @@ const (
 	OpenKindTerminal = "terminal"
 	// DefaultOpenTerminalProvider is the built-in terminal provider selection.
 	DefaultOpenTerminalProvider = TerminalProviderAuto
+	// DefaultTmuxMode is the built-in tmux optimization mode.
+	DefaultTmuxMode = string(opener.TmuxModeAuto)
 
 	// ListFormatTable is the table format for `wto list`.
 	ListFormatTable = "table"
@@ -45,6 +47,8 @@ const (
 	SupportedWindowModesText = "new|reuse"
 	// SupportedTerminalProvidersText is used in help/error messages.
 	SupportedTerminalProvidersText = "auto|windows-terminal|cmd|powershell|terminal|gnome-terminal|wezterm|iterm2|ghostty|warp|tabby"
+	// SupportedTmuxModesText is used in help/error messages.
+	SupportedTmuxModesText = "auto|off|split|window"
 	// SupportedDeleteBranchModesText is used in help/error messages.
 	SupportedDeleteBranchModesText = "none|safe|force"
 	// ListSupportedFormatsText is used in help/error messages.
@@ -81,6 +85,15 @@ const (
 	TerminalProviderWarp = "warp"
 	// TerminalProviderTabby is the Tabby provider.
 	TerminalProviderTabby = "tabby"
+
+	// TmuxModeAuto enables tmux optimization only when tmux context is detected.
+	TmuxModeAuto = string(opener.TmuxModeAuto)
+	// TmuxModeOff disables tmux optimization.
+	TmuxModeOff = string(opener.TmuxModeOff)
+	// TmuxModeSplit requests tmux split-pane behavior.
+	TmuxModeSplit = string(opener.TmuxModeSplit)
+	// TmuxModeWindow requests tmux new-window behavior.
+	TmuxModeWindow = string(opener.TmuxModeWindow)
 )
 
 var (
@@ -103,6 +116,12 @@ var (
 		TerminalProviderGhostty:         {},
 		TerminalProviderWarp:            {},
 		TerminalProviderTabby:           {},
+	}
+	supportedTmuxModes = map[string]struct{}{
+		TmuxModeAuto:   {},
+		TmuxModeOff:    {},
+		TmuxModeSplit:  {},
+		TmuxModeWindow: {},
 	}
 	supportedTemplateTokens = map[string]struct{}{
 		WorktreeTemplateTokenRepoParent: {},

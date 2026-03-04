@@ -58,6 +58,9 @@ func TestFileProviderLoad_AppliesGlobalConfig(t *testing.T) {
     "default": "cursor",
     "prune": false,
     "terminalProvider": "warp"
+  },
+  "tmux": {
+    "mode": "split"
   }
 }`
 	if err := os.WriteFile(globalPath, []byte(globalBody), 0o644); err != nil {
@@ -92,6 +95,9 @@ func TestFileProviderLoad_AppliesGlobalConfig(t *testing.T) {
 	}
 	if got.Open.TerminalProvider != "warp" {
 		t.Fatalf("unexpected open.terminalProvider: %q", got.Open.TerminalProvider)
+	}
+	if got.Tmux.Mode != TmuxModeSplit {
+		t.Fatalf("unexpected tmux.mode: %q", got.Tmux.Mode)
 	}
 	if got.Open.Window != DefaultConfig().Open.Window {
 		t.Fatalf("unexpected open.window: %q", got.Open.Window)

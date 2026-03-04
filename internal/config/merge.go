@@ -21,6 +21,7 @@ type configOverride struct {
 	OpenWindow           *string
 	OpenPrune            *bool
 	OpenTerminalProvider *string
+	TmuxMode             *string
 	RMDeleteBranch       *string
 }
 
@@ -53,6 +54,9 @@ func mergeConfig(base Config, override configOverride) Config {
 	}
 	if override.OpenTerminalProvider != nil {
 		merged.Open.TerminalProvider = *override.OpenTerminalProvider
+	}
+	if override.TmuxMode != nil {
+		merged.Tmux.Mode = *override.TmuxMode
 	}
 	if override.RMDeleteBranch != nil {
 		merged.RM.DeleteBranch = *override.RMDeleteBranch
@@ -106,6 +110,13 @@ func normalizeOverride(raw rawConfig) (configOverride, error) {
 			return configOverride{}, err
 		}
 		out.OpenTerminalProvider = openTerminalProvider
+	}
+	if raw.Tmux != nil {
+		tmuxMode, err := normalizeTmuxMode(raw.Tmux.Mode)
+		if err != nil {
+			return configOverride{}, err
+		}
+		out.TmuxMode = tmuxMode
 	}
 
 	if raw.RM != nil {
@@ -188,6 +199,19 @@ func normalizeTerminalProvider(value *string) (*string, error) {
 	}
 
 	return nil, fmt.Errorf("open.terminalProvider %q is invalid. Use one of: %s", *value, SupportedTerminalProvidersText)
+}
+
+func normalizeTmuxMode(value *string) (*string, error) {
+	if value == nil {
+		return nil, nil
+	}
+
+	trimmed := strings.ToLower(strings.TrimSpace(*value))
+	if _, ok := supportedTmuxModes[trimmed]; ok {
+		return &trimmed, nil
+	}
+
+	return nil, fmt.Errorf("tmux.mode %q is invalid. Use one of: %s", *value, SupportedTmuxModesText)
 }
 
 func normalizeWorktreeDirTemplate(value *string) (*string, error) {

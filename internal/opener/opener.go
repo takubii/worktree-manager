@@ -50,6 +50,16 @@ const (
 	WindowReuse WindowMode = "reuse"
 )
 
+// TmuxMode controls tmux optimization mode for terminal workflows.
+type TmuxMode string
+
+const (
+	TmuxModeAuto   TmuxMode = "auto"
+	TmuxModeOff    TmuxMode = "off"
+	TmuxModeSplit  TmuxMode = "split"
+	TmuxModeWindow TmuxMode = "window"
+)
+
 // Opener opens a path with a selected tool.
 type Opener interface {
 	Open(ctx context.Context, kind string, path string, window WindowMode) error
@@ -61,6 +71,7 @@ type OpenRequest struct {
 	Path             string
 	Window           WindowMode
 	TerminalProvider string
+	TmuxMode         TmuxMode
 }
 
 // OpenResult contains opener execution details.
@@ -90,6 +101,7 @@ func (o *defaultOpener) Open(ctx context.Context, kind string, path string, wind
 		Path:             path,
 		Window:           window,
 		TerminalProvider: TerminalProviderAuto,
+		TmuxMode:         TmuxModeAuto,
 	})
 	return err
 }
@@ -140,6 +152,21 @@ func ParseWindowMode(raw string) (WindowMode, error) {
 		return WindowReuse, nil
 	default:
 		return "", fmt.Errorf("invalid window mode %q. Use one of: new, reuse", raw)
+	}
+}
+
+func ParseTmuxMode(raw string) (TmuxMode, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", string(TmuxModeAuto):
+		return TmuxModeAuto, nil
+	case string(TmuxModeOff):
+		return TmuxModeOff, nil
+	case string(TmuxModeSplit):
+		return TmuxModeSplit, nil
+	case string(TmuxModeWindow):
+		return TmuxModeWindow, nil
+	default:
+		return "", fmt.Errorf("invalid tmux mode %q. Use one of: auto, off, split, window", raw)
 	}
 }
 

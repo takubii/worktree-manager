@@ -16,6 +16,7 @@ const errNoValidWorktreesForOpen = "no valid worktrees found after filtering sta
 func newOpenCmd(deps Dependencies) *cobra.Command {
 	var openerName string
 	var terminalProvider string
+	var tmuxModeRaw string
 	var windowModeRaw string
 	var targetBranch string
 	var printCD bool
@@ -35,7 +36,6 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 			if printCD && outputMode != outputModeNone {
 				return fmt.Errorf("`--print-cd` and `--output` cannot be used together. Use one mode and retry")
 			}
-			tracef(cmd.Context(), "open: branch=%q opener=%q terminalProvider=%q window=%q output=%s printCD=%v noPrune=%v", targetBranch, openerName, terminalProvider, windowModeRaw, outputMode, printCD, noPrune)
 
 			cfg := deps.Config.Load(cmd.Context())
 			resolvedNoPrune := noPrune
@@ -57,12 +57,24 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 			if !cmd.Flags().Changed("terminal-provider") {
 				terminalProvider = cfg.Open.TerminalProvider
 			}
+			if !cmd.Flags().Changed("tmux-mode") {
+				tmuxModeRaw = cfg.Tmux.Mode
+			}
 			if !cmd.Flags().Changed("window") {
 				windowModeRaw = cfg.Open.Window
 			}
+			tracef(cmd.Context(), "open: branch=%q opener=%q terminalProvider=%q tmuxMode=%q window=%q output=%s printCD=%v noPrune=%v", targetBranch, openerName, terminalProvider, tmuxModeRaw, windowModeRaw, outputMode, printCD, noPrune)
 
 			if cmd.Flags().Changed("terminal-provider") && strings.ToLower(strings.TrimSpace(openerName)) != opener.KindTerminal {
 				return fmt.Errorf("`--terminal-provider` can only be used with `--open terminal`. Set `--open terminal` and retry")
+			}
+			if cmd.Flags().Changed("tmux-mode") && strings.ToLower(strings.TrimSpace(openerName)) != opener.KindTerminal {
+				return fmt.Errorf("`--tmux-mode` can only be used with `--open terminal`. Set `--open terminal` and retry")
+			}
+
+			tmuxMode, err := opener.ParseTmuxMode(tmuxModeRaw)
+			if err != nil {
+				return err
 			}
 
 			if err := validateExplicitOpenerAvailability(cmd, deps.LookPath, openerName); err != nil {
@@ -101,8 +113,8 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			tracef(cmd.Context(), "open: invoking opener kind=%s terminalProvider=%s path=%s window=%s", openerName, terminalProvider, selected.Path, windowMode)
-			openResult, err := openPathWithResult(cmd.Context(), deps.Opener, openerName, selected.Path, windowMode, terminalProvider)
+			tracef(cmd.Context(), "open: invoking opener kind=%s terminalProvider=%s tmuxMode=%s path=%s window=%s", openerName, terminalProvider, tmuxMode, selected.Path, windowMode)
+			openResult, err := openPathWithResult(cmd.Context(), deps.Opener, openerName, selected.Path, windowMode, terminalProvider, tmuxMode)
 			if err != nil {
 				return err
 			}
@@ -144,6 +156,7 @@ func newOpenCmd(deps Dependencies) *cobra.Command {
 
 	cmd.Flags().StringVar(&openerName, "open", config.DefaultOpenKind, "opener to use: "+config.SupportedOpenKindsText)
 	cmd.Flags().StringVar(&terminalProvider, "terminal-provider", config.DefaultOpenTerminalProvider, "terminal provider: "+config.SupportedTerminalProvidersText)
+	cmd.Flags().StringVar(&tmuxModeRaw, "tmux-mode", config.DefaultTmuxMode, "tmux mode: "+config.SupportedTmuxModesText)
 	cmd.Flags().StringVar(&windowModeRaw, "window", config.DefaultOpenWindow, "window behavior: "+config.SupportedWindowModesText)
 	cmd.Flags().StringVar(&targetBranch, "branch", "", "open worktree linked to this local branch")
 	cmd.Flags().BoolVar(&printCD, "print-cd", false, "print cd command hints for the opened worktree")

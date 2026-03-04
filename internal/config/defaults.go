@@ -32,6 +32,9 @@ func DefaultConfig() Config {
 			Prune:            true,
 			TerminalProvider: DefaultOpenTerminalProvider,
 		},
+		Tmux: Tmux{
+			Mode: DefaultTmuxMode,
+		},
 		RM: RM{
 			DeleteBranch: DeleteBranchSafe,
 		},

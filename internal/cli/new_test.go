@@ -928,6 +928,37 @@ func TestNewCommand_PassesTerminalProviderToOpener(t *testing.T) {
 	}
 }
 
+func TestNewCommand_PassesTmuxModeToOpener(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := createTestRepoRoot(t)
+	gitClient := &fakeGitClient{
+		repoRoot:       repoRoot,
+		localBranches:  []string{"main", "feature/local"},
+		remoteBranches: []string{"origin/main"},
+	}
+	openExec := &fakeOpener{}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   openExec,
+	})
+	cmd.SetArgs([]string{"new", "feature/local", "--open", "terminal", "--tmux-mode", "split"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+	if openExec.kind != "terminal" {
+		t.Fatalf("unexpected opener kind: %q", openExec.kind)
+	}
+	if openExec.tmuxMode != openerpkg.TmuxModeSplit {
+		t.Fatalf("unexpected tmux mode: %q", openExec.tmuxMode)
+	}
+}
+
 func TestNewCommand_ReturnsErrorWhenTerminalProviderUsedWithoutTerminalOpen(t *testing.T) {
 	t.Parallel()
 
@@ -953,6 +984,109 @@ func TestNewCommand_ReturnsErrorWhenTerminalProviderUsedWithoutTerminalOpen(t *t
 	}
 	if !strings.Contains(err.Error(), "`--terminal-provider` can only be used with `--open terminal`") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestNewCommand_ReturnsErrorWhenTmuxModeUsedWithoutTerminalOpen(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := createTestRepoRoot(t)
+	gitClient := &fakeGitClient{
+		repoRoot:       repoRoot,
+		localBranches:  []string{"main", "feature/local"},
+		remoteBranches: []string{"origin/main"},
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+	})
+	cmd.SetArgs([]string{"new", "feature/local", "--open", "none", "--tmux-mode", "window"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected Execute() to return error")
+	}
+	if !strings.Contains(err.Error(), "`--tmux-mode` can only be used with `--open terminal`") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestNewCommand_ReturnsErrorForInvalidTmuxMode(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := createTestRepoRoot(t)
+	gitClient := &fakeGitClient{
+		repoRoot:       repoRoot,
+		localBranches:  []string{"main", "feature/local"},
+		remoteBranches: []string{"origin/main"},
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+	})
+	cmd.SetArgs([]string{"new", "feature/local", "--open", "terminal", "--tmux-mode", "invalid"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected Execute() to return error")
+	}
+	if !strings.Contains(err.Error(), "invalid tmux mode") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestNewCommand_UsesConfigTmuxModeWhenFlagIsNotProvided(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := createTestRepoRoot(t)
+	gitClient := &fakeGitClient{
+		repoRoot:       repoRoot,
+		localBranches:  []string{"main", "feature/local"},
+		remoteBranches: []string{"origin/main"},
+	}
+	openExec := &fakeOpener{}
+	cfgProvider := &fakeConfigProvider{
+		cfg: config.Config{
+			Remote:              config.DefaultRemote,
+			BaseBranch:          config.DefaultBaseBranch,
+			WorktreeDirTemplate: config.DefaultWorktreeDirTemplate,
+			New:                 config.DefaultConfig().New,
+			Open: config.Open{
+				Default:          config.DefaultOpenKind,
+				Window:           config.DefaultOpenWindow,
+				Prune:            true,
+				TerminalProvider: config.DefaultOpenTerminalProvider,
+			},
+			Tmux: config.Tmux{
+				Mode: config.TmuxModeWindow,
+			},
+			RM: config.DefaultConfig().RM,
+		},
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   openExec,
+		Config:   cfgProvider,
+	})
+	cmd.SetArgs([]string{"new", "feature/local", "--open", "terminal"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+	if openExec.tmuxMode != openerpkg.TmuxModeWindow {
+		t.Fatalf("unexpected tmux mode: %q", openExec.tmuxMode)
 	}
 }
 

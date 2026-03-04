@@ -29,6 +29,7 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 	var baseBranch string
 	var openerName string
 	var terminalProvider string
+	var tmuxModeRaw string
 	var noFetch bool
 	var noPrune bool
 	var outputRaw string
@@ -42,7 +43,6 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			tracef(cmd.Context(), "new: opener=%q terminalProvider=%q output=%s base=%q noFetch=%v noPrune=%v", openerName, terminalProvider, outputMode, baseBranch, noFetch, noPrune)
 
 			cfg := deps.Config.Load(cmd.Context())
 			resolvedNoPrune := noPrune
@@ -81,8 +81,19 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 			if !cmd.Flags().Changed("terminal-provider") {
 				resolvedTerminalProvider = cfg.Open.TerminalProvider
 			}
+			if !cmd.Flags().Changed("tmux-mode") {
+				tmuxModeRaw = cfg.Tmux.Mode
+			}
+			tracef(cmd.Context(), "new: opener=%q terminalProvider=%q tmuxMode=%q output=%s base=%q noFetch=%v noPrune=%v", openerName, terminalProvider, tmuxModeRaw, outputMode, baseBranch, noFetch, noPrune)
 			if cmd.Flags().Changed("terminal-provider") && resolvedOpener != opener.KindTerminal {
 				return fmt.Errorf("`--terminal-provider` can only be used with `--open terminal`. Set `--open terminal` and retry")
+			}
+			if cmd.Flags().Changed("tmux-mode") && resolvedOpener != opener.KindTerminal {
+				return fmt.Errorf("`--tmux-mode` can only be used with `--open terminal`. Set `--open terminal` and retry")
+			}
+			tmuxMode, err := opener.ParseTmuxMode(tmuxModeRaw)
+			if err != nil {
+				return err
 			}
 			if resolvedOpener != newOpenNone {
 				if err := validateExplicitOpenerAvailability(cmd, deps.LookPath, resolvedOpener); err != nil {
@@ -161,8 +172,8 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 					return fmt.Errorf("invalid config open.window value: %w", err)
 				}
 
-				tracef(cmd.Context(), "new: invoking opener kind=%s terminalProvider=%s path=%s window=%s", resolvedOpener, resolvedTerminalProvider, worktreePath, windowMode)
-				openResult, err := openPathWithResult(cmd.Context(), deps.Opener, resolvedOpener, worktreePath, windowMode, resolvedTerminalProvider)
+				tracef(cmd.Context(), "new: invoking opener kind=%s terminalProvider=%s tmuxMode=%s path=%s window=%s", resolvedOpener, resolvedTerminalProvider, tmuxMode, worktreePath, windowMode)
+				openResult, err := openPathWithResult(cmd.Context(), deps.Opener, resolvedOpener, worktreePath, windowMode, resolvedTerminalProvider, tmuxMode)
 				if err != nil {
 					return err
 				}
@@ -187,6 +198,7 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 	cmd.Flags().StringVar(&baseBranch, "base", defaultBaseBranch, "base branch used when creating a new branch")
 	cmd.Flags().StringVar(&openerName, "open", newOpenNone, "opener to use after creation: none|"+config.SupportedOpenKindsText)
 	cmd.Flags().StringVar(&terminalProvider, "terminal-provider", config.DefaultOpenTerminalProvider, "terminal provider: "+config.SupportedTerminalProvidersText)
+	cmd.Flags().StringVar(&tmuxModeRaw, "tmux-mode", config.DefaultTmuxMode, "tmux mode: "+config.SupportedTmuxModesText)
 	cmd.Flags().BoolVar(&noFetch, "no-fetch", false, "skip running git fetch <remote> --prune before branch resolution")
 	cmd.Flags().BoolVar(&noPrune, "no-prune", false, "skip running git worktree prune --expire now before processing")
 	cmd.Flags().StringVar(&outputRaw, "output", string(outputModeNone), "output mode: "+supportedOutputModesText)

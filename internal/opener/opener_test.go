@@ -47,6 +47,46 @@ func TestParseWindowMode(t *testing.T) {
 	}
 }
 
+func TestParseTmuxMode(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		input   string
+		want    TmuxMode
+		wantErr bool
+	}{
+		{name: "default-empty", input: "", want: TmuxModeAuto},
+		{name: "auto", input: "auto", want: TmuxModeAuto},
+		{name: "off", input: "off", want: TmuxModeOff},
+		{name: "split", input: "split", want: TmuxModeSplit},
+		{name: "window", input: "window", want: TmuxModeWindow},
+		{name: "uppercase", input: "SPLIT", want: TmuxModeSplit},
+		{name: "invalid", input: "other", wantErr: true},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := ParseTmuxMode(tc.input)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected error for %q", tc.input)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ParseTmuxMode() returned error: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("unexpected mode: want=%q got=%q", tc.want, got)
+			}
+		})
+	}
+}
+
 func TestOpenVSCode_UsesNewWindowFlag(t *testing.T) {
 	t.Parallel()
 

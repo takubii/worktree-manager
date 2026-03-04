@@ -33,6 +33,7 @@ type fakeOpener struct {
 	path             string
 	window           openerpkg.WindowMode
 	terminalProvider string
+	tmuxMode         openerpkg.TmuxMode
 	err              error
 	result           openerpkg.OpenResult
 	call             int
@@ -52,6 +53,7 @@ func (o *fakeOpener) OpenWithResult(_ context.Context, req openerpkg.OpenRequest
 	o.path = req.Path
 	o.window = req.Window
 	o.terminalProvider = req.TerminalProvider
+	o.tmuxMode = req.TmuxMode
 	if o.err != nil {
 		return openerpkg.OpenResult{}, o.err
 	}
@@ -994,6 +996,35 @@ func TestOpenCommand_PassesTerminalProviderToOpener(t *testing.T) {
 	}
 }
 
+func TestOpenCommand_PassesTmuxModeToOpener(t *testing.T) {
+	t.Parallel()
+
+	repoPath := toPosixPathForOpen(t.TempDir())
+	gitClient := &fakeGitClient{
+		output: "worktree " + repoPath + "\nHEAD abc\nbranch refs/heads/main\n\n",
+	}
+	openExec := &fakeOpener{}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   openExec,
+	})
+	cmd.SetArgs([]string{"open", "--open", "terminal", "--tmux-mode", "window"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+	if openExec.kind != "terminal" {
+		t.Fatalf("unexpected opener kind: %q", openExec.kind)
+	}
+	if openExec.tmuxMode != openerpkg.TmuxModeWindow {
+		t.Fatalf("unexpected tmux mode: %q", openExec.tmuxMode)
+	}
+}
+
 func TestOpenCommand_ReturnsErrorWhenTerminalProviderUsedWithoutTerminalOpen(t *testing.T) {
 	t.Parallel()
 
@@ -1014,6 +1045,97 @@ func TestOpenCommand_ReturnsErrorWhenTerminalProviderUsedWithoutTerminalOpen(t *
 	}
 	if !strings.Contains(err.Error(), "`--terminal-provider` can only be used with `--open terminal`") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestOpenCommand_ReturnsErrorWhenTmuxModeUsedWithoutTerminalOpen(t *testing.T) {
+	t.Parallel()
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+		Git: &fakeGitClient{
+			output: "worktree C:/repo\nHEAD abc\nbranch refs/heads/main\n\n",
+		},
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+	})
+	cmd.SetArgs([]string{"open", "--open", "system", "--tmux-mode", "split"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected Execute() to return error")
+	}
+	if !strings.Contains(err.Error(), "`--tmux-mode` can only be used with `--open terminal`") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestOpenCommand_ReturnsErrorForInvalidTmuxMode(t *testing.T) {
+	t.Parallel()
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+		Git: &fakeGitClient{
+			output: "worktree C:/repo\nHEAD abc\nbranch refs/heads/main\n\n",
+		},
+		Selector: &fakeSelector{index: 0},
+		Opener:   &fakeOpener{},
+	})
+	cmd.SetArgs([]string{"open", "--open", "terminal", "--tmux-mode", "invalid"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected Execute() to return error")
+	}
+	if !strings.Contains(err.Error(), "invalid tmux mode") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestOpenCommand_UsesConfigTmuxModeWhenFlagIsNotProvided(t *testing.T) {
+	t.Parallel()
+
+	repoPath := toPosixPathForOpen(t.TempDir())
+	gitClient := &fakeGitClient{
+		output: "worktree " + repoPath + "\nHEAD abc\nbranch refs/heads/main\n\n",
+	}
+	openExec := &fakeOpener{}
+	cfgProvider := &fakeConfigProvider{
+		cfg: config.Config{
+			Remote:              config.DefaultRemote,
+			BaseBranch:          config.DefaultBaseBranch,
+			WorktreeDirTemplate: config.DefaultWorktreeDirTemplate,
+			New:                 config.DefaultConfig().New,
+			Open: config.Open{
+				Default:          config.OpenKindTerminal,
+				Window:           config.DefaultOpenWindow,
+				Prune:            true,
+				TerminalProvider: config.DefaultOpenTerminalProvider,
+			},
+			Tmux: config.Tmux{
+				Mode: config.TmuxModeSplit,
+			},
+			RM: config.DefaultConfig().RM,
+		},
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Opener:   openExec,
+		Config:   cfgProvider,
+	})
+	cmd.SetArgs([]string{"open"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+	if openExec.tmuxMode != openerpkg.TmuxModeSplit {
+		t.Fatalf("unexpected tmux mode: %q", openExec.tmuxMode)
 	}
 }
 

@@ -5,13 +5,16 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/takubii/git-worktree-opener/internal/config"
 	"github.com/takubii/git-worktree-opener/internal/git"
+	"github.com/takubii/git-worktree-opener/internal/opener"
 )
 
 func newEnterCmd(deps Dependencies) *cobra.Command {
 	var useShell bool
 	var printCD bool
 	var targetBranch string
+	var tmuxModeRaw string
 
 	cmd := &cobra.Command{
 		Use:   "enter",
@@ -21,7 +24,22 @@ func newEnterCmd(deps Dependencies) *cobra.Command {
 			if useShell && printCD {
 				return fmt.Errorf("`--shell` and `--print-cd` cannot be used together. Choose one mode and retry")
 			}
-			tracef(cmd.Context(), "enter: branch=%q shell=%v printCD=%v", targetBranch, useShell, printCD)
+			if cmd.Flags().Changed("tmux-mode") && !useShell {
+				return fmt.Errorf("`--tmux-mode` can only be used with `--shell`. Set `--shell` and retry")
+			}
+			tmuxMode := opener.TmuxModeAuto
+			if useShell {
+				cfg := deps.Config.Load(cmd.Context())
+				if !cmd.Flags().Changed("tmux-mode") {
+					tmuxModeRaw = cfg.Tmux.Mode
+				}
+				parsedTmuxMode, err := opener.ParseTmuxMode(tmuxModeRaw)
+				if err != nil {
+					return err
+				}
+				tmuxMode = parsedTmuxMode
+			}
+			tracef(cmd.Context(), "enter: branch=%q shell=%v printCD=%v tmuxMode=%q", targetBranch, useShell, printCD, tmuxMode)
 
 			tracef(cmd.Context(), "enter: running `git worktree prune --expire now`")
 			if err := deps.Git.WorktreePrune(cmd.Context()); err != nil {
@@ -97,8 +115,8 @@ func newEnterCmd(deps Dependencies) *cobra.Command {
 			}
 
 			if useShell {
-				tracef(cmd.Context(), "enter: starting subshell path=%s", selected.Path)
-				return deps.Enter.StartShell(cmd.Context(), selected.Path)
+				tracef(cmd.Context(), "enter: starting subshell path=%s tmuxMode=%s", selected.Path, tmuxMode)
+				return deps.Enter.StartShell(cmd.Context(), selected.Path, tmuxMode)
 			}
 
 			tracef(cmd.Context(), "enter: writing selected path output")
@@ -112,6 +130,7 @@ func newEnterCmd(deps Dependencies) *cobra.Command {
 	cmd.Flags().BoolVar(&useShell, "shell", false, "start a subshell in the selected worktree")
 	cmd.Flags().BoolVar(&printCD, "print-cd", false, "print cd command hints for the selected worktree")
 	cmd.Flags().StringVar(&targetBranch, "branch", "", "enter worktree linked to this local branch")
+	cmd.Flags().StringVar(&tmuxModeRaw, "tmux-mode", config.DefaultTmuxMode, "tmux mode: "+config.SupportedTmuxModesText)
 
 	return cmd
 }

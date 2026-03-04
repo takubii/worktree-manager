@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/takubii/git-worktree-opener/internal/execerr"
+	"github.com/takubii/git-worktree-opener/internal/opener"
 )
 
 type enterCommandContextFunc func(ctx context.Context, name string, args ...string) *exec.Cmd
@@ -15,7 +16,7 @@ type enterCommandContextFunc func(ctx context.Context, name string, args ...stri
 // EnterRunner provides shell-specific behavior for `wto enter`.
 type EnterRunner interface {
 	FormatCDHints(path string) []string
-	StartShell(ctx context.Context, path string) error
+	StartShell(ctx context.Context, path string, tmuxMode opener.TmuxMode) error
 }
 
 type defaultEnterRunner struct {
@@ -52,7 +53,7 @@ func (r *defaultEnterRunner) FormatCDHints(path string) []string {
 	}
 }
 
-func (r *defaultEnterRunner) StartShell(ctx context.Context, path string) error {
+func (r *defaultEnterRunner) StartShell(ctx context.Context, path string, _ opener.TmuxMode) error {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return execerr.Build("interactive shell", "selected worktree path is empty", "select a valid worktree and retry")

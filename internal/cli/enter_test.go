@@ -6,12 +6,16 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/takubii/git-worktree-opener/internal/config"
+	"github.com/takubii/git-worktree-opener/internal/opener"
 )
 
 type fakeEnterRunner struct {
 	hints      []string
 	hintsPath  string
 	startPath  string
+	startTmux  opener.TmuxMode
 	startCalls int
 	startErr   error
 }
@@ -21,9 +25,10 @@ func (r *fakeEnterRunner) FormatCDHints(path string) []string {
 	return append([]string(nil), r.hints...)
 }
 
-func (r *fakeEnterRunner) StartShell(_ context.Context, path string) error {
+func (r *fakeEnterRunner) StartShell(_ context.Context, path string, tmuxMode opener.TmuxMode) error {
 	r.startCalls++
 	r.startPath = path
+	r.startTmux = tmuxMode
 	return r.startErr
 }
 
@@ -142,6 +147,9 @@ func TestEnterCommand_ShellModeStartsRunner(t *testing.T) {
 	if runner.startPath != worktreePath {
 		t.Fatalf("unexpected StartShell path: %q", runner.startPath)
 	}
+	if runner.startTmux != opener.TmuxModeAuto {
+		t.Fatalf("unexpected StartShell tmux mode: %q", runner.startTmux)
+	}
 }
 
 func TestEnterCommand_BranchModeSelectsWithoutPrompt(t *testing.T) {
@@ -243,6 +251,119 @@ func TestEnterCommand_ReturnsErrorForConflictingModes(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "cannot be used together") {
 		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
+func TestEnterCommand_ReturnsErrorWhenTmuxModeUsedWithoutShell(t *testing.T) {
+	t.Parallel()
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+		Git: &fakeGitClient{
+			output: "worktree C:/repo\nHEAD abc\nbranch refs/heads/main\n\n",
+		},
+		Selector: &fakeSelector{index: 0},
+		Enter:    &fakeEnterRunner{},
+	})
+	cmd.SetArgs([]string{"enter", "--tmux-mode", "split"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected Execute() to return error")
+	}
+	if !strings.Contains(err.Error(), "`--tmux-mode` can only be used with `--shell`") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
+func TestEnterCommand_ShellModePassesExplicitTmuxMode(t *testing.T) {
+	t.Parallel()
+
+	worktreePath := toPosixPath(t.TempDir())
+	runner := &fakeEnterRunner{}
+	gitClient := &fakeGitClient{
+		output: "worktree " + worktreePath + "\nHEAD abc\nbranch refs/heads/main\n\n",
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Enter:    runner,
+	})
+	cmd.SetArgs([]string{"enter", "--shell", "--tmux-mode", "window"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+	if runner.startTmux != opener.TmuxModeWindow {
+		t.Fatalf("unexpected StartShell tmux mode: %q", runner.startTmux)
+	}
+}
+
+func TestEnterCommand_ReturnsErrorForInvalidTmuxMode(t *testing.T) {
+	t.Parallel()
+
+	worktreePath := toPosixPath(t.TempDir())
+	cmd := NewRootCmd(Dependencies{
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+		Git: &fakeGitClient{
+			output: "worktree " + worktreePath + "\nHEAD abc\nbranch refs/heads/main\n\n",
+		},
+		Selector: &fakeSelector{index: 0},
+		Enter:    &fakeEnterRunner{},
+	})
+	cmd.SetArgs([]string{"enter", "--shell", "--tmux-mode", "invalid"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected Execute() to return error")
+	}
+	if !strings.Contains(err.Error(), "invalid tmux mode") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
+func TestEnterCommand_ShellModeUsesConfigTmuxMode(t *testing.T) {
+	t.Parallel()
+
+	worktreePath := toPosixPath(t.TempDir())
+	runner := &fakeEnterRunner{}
+	gitClient := &fakeGitClient{
+		output: "worktree " + worktreePath + "\nHEAD abc\nbranch refs/heads/main\n\n",
+	}
+	cfgProvider := &fakeConfigProvider{
+		cfg: config.Config{
+			Remote:              config.DefaultRemote,
+			BaseBranch:          config.DefaultBaseBranch,
+			WorktreeDirTemplate: config.DefaultWorktreeDirTemplate,
+			New:                 config.DefaultConfig().New,
+			Open:                config.DefaultConfig().Open,
+			Tmux: config.Tmux{
+				Mode: config.TmuxModeSplit,
+			},
+			RM: config.DefaultConfig().RM,
+		},
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &bytes.Buffer{},
+		Git:      gitClient,
+		Selector: &fakeSelector{index: 0},
+		Enter:    runner,
+		Config:   cfgProvider,
+	})
+	cmd.SetArgs([]string{"enter", "--shell"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+	if runner.startTmux != opener.TmuxModeSplit {
+		t.Fatalf("unexpected StartShell tmux mode: %q", runner.startTmux)
 	}
 }
 
