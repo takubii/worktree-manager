@@ -56,3 +56,25 @@ Repository rules for human/AI contributors.
 ## Documentation Rules
 
 - Update `README.md` when user-facing behavior changes.
+
+## Review Guidelines
+
+- Prioritize review comments that have clear impact on correctness, safety, compatibility, diagnosability, or maintenance cost.
+- Do not make purely stylistic or school-of-thought preferences blocking when `golangci-lint` or existing repository rules already cover them.
+
+1. Check correctness and operational safety first.
+   Review for wrong-repository/worktree/branch handling, destructive behavior, path handling mistakes, and OS-specific regressions.
+2. Preserve public CLI contracts.
+   Review for unintended changes to flags, defaults, stdout/stderr usage, exit codes, output formats, config precedence, and documented command behavior.
+3. Require actionable error handling.
+   Review for errors that hide root cause, lose context, ignore partial-failure paths, or fail to tell the user what to do next.
+4. Avoid unnecessary coupling and maintenance burden.
+   Review for changes that unnecessarily mix unrelated concerns, spread one behavior across too many places, or make future modification and testing materially harder.
+5. Prefer simple, testable designs.
+   Review for unnecessary abstraction, hidden coupling, avoidable new dependencies, or control flow that becomes harder to reason about than the problem requires.
+6. Maintain readability at the point of change.
+   Review for naming, function boundaries, branching, and data flow that make intent hard to recover, especially around command behavior and platform-specific code.
+7. Expect tests for behavior changes and regressions.
+   Review for missing or weak tests when behavior changes, bugs are fixed, or edge cases are added. Prefer environment-independent tests using stubs over host-installed tools.
+8. Call out breaking-change risk explicitly.
+   Review for impact on existing users, scripts, config files, machine-readable output, install/update flows, and README-documented workflows. Intentional changes should be documented.
