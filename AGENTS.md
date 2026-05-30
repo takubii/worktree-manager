@@ -8,8 +8,8 @@ Repository rules for human/AI contributors.
 
 ## Project Facts
 
-- Project: `git-worktree-opener`
-- Binary name: `wto`
+- Project: `worktree-manager`
+- Binary name: `wtm`
 - Language: Go
 
 ## Core Rules
@@ -24,7 +24,7 @@ Repository rules for human/AI contributors.
 
 1. Use `golangci-lint` as the primary lint/format toolchain.
 2. Prefer `golangci-lint fmt` for Go formatting (including import organization configured in `.golangci.yaml`).
-3. Keep `cmd/wto/main.go` minimal (wiring + process exit handling only).
+3. Keep `cmd/wtm/main.go` minimal (wiring + process exit handling only).
 4. Keep CLI wiring in `internal/cli`.
 5. Keep Git command execution in `internal/git`.
 6. Prefer dependency injection via interfaces for testability.
@@ -40,8 +40,8 @@ Repository rules for human/AI contributors.
    - `golangci-lint run`
    - `go test ./...`
 4. For CLI-impacting changes, also smoke test:
-   - `go run ./cmd/wto --help`
-   - `go run ./cmd/wto list` (run inside a Git repository, if applicable)
+   - `go run ./cmd/wtm --help`
+   - `go run ./cmd/wtm list` (run inside a Git repository, if applicable)
 5. Keep CI parity with `.github/workflows/ci.yaml` (lint + tests + cross-platform build expectations).
 
 ## Dependency Rules

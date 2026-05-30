@@ -13,7 +13,7 @@ Format:
 Examples:
 
 ```text
-feat(cli): add worktree open command
+feat(cli): add worktree path command
 fix(path): handle spaces in repository path
 docs(readme): update usage examples
 chore(ci): add Go test workflow
@@ -43,4 +43,3 @@ chore(ci): add Go test workflow
 - `ci`: CI/CD configuration changes
 - `chore`: Maintenance work
 - `revert`: Revert a previous commit
-

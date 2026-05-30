@@ -30,35 +30,34 @@ This document describes the maintainer workflow for automated releases.
 
 ## Post-Release Smoke Checks (Recommended)
 
-Run a quick install validation for each platform, including Windows `cmd.exe`.
+Run a quick install validation for each supported installer.
 
-Windows `cmd.exe` example:
+Windows PowerShell example:
 
-```bat
-curl -fsSL -o install.cmd https://raw.githubusercontent.com/takubii/git-worktree-opener/main/scripts/install.cmd
-install.cmd vX.Y.Z
-wto --help
+```powershell
+$env:WTM_VERSION = "vX.Y.Z"
+iwr https://raw.githubusercontent.com/takubii/worktree-manager/main/scripts/install.ps1 -UseBasicParsing | iex
+wtm --help
 ```
 
-Terminal opener smoke checks:
+CLI smoke checks:
 
 ```sh
-wto open --help
-wto new --help
-wto doctor
+wtm create --help
+wtm path --help
+wtm remove --help
+wtm doctor
 ```
 
-Windows (`cmd.exe`) terminal provider smoke:
+Repository smoke checks:
 
 ```bat
-wto open --open terminal --terminal-provider auto
-wto open --open terminal --terminal-provider powershell
+wtm list
+wtm path
 ```
-
-Linux/macOS terminal provider smoke:
-
 ```sh
-wto open --open terminal --terminal-provider auto
+wtm list
+wtm path
 ```
 
 ## Manual CD Run (`workflow_dispatch`)
