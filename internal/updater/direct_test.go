@@ -21,33 +21,33 @@ import (
 func TestDirectUpdate_UnixLatestReplacesBinary(t *testing.T) {
 	t.Parallel()
 
-	archiveName := "git-worktree-opener_v9.9.9_linux_amd64.tar.gz"
-	archive := buildTarGzArchive(t, "wto", []byte("new-binary"))
+	archiveName := "worktree-manager_v9.9.9_linux_amd64.tar.gz"
+	archive := buildTarGzArchive(t, "wtm", []byte("new-binary"))
 	archiveHash := sha256Hex(archive)
 	checksums := archiveHash + "  " + archiveName + "\n"
 
 	var latestCalled bool
 	server := newReleaseServer(
 		t,
-		"/repos/takubii/git-worktree-opener/releases/latest",
+		"/repos/takubii/worktree-manager/releases/latest",
 		"v9.9.9",
 		archiveName,
 		archive,
 		[]byte(checksums),
 		func(path string) {
-			if path == "/repos/takubii/git-worktree-opener/releases/latest" {
+			if path == "/repos/takubii/worktree-manager/releases/latest" {
 				latestCalled = true
 			}
 		},
 	)
 	defer server.Close()
 
-	targetPath := filepath.Join(t.TempDir(), "wto")
+	targetPath := filepath.Join(t.TempDir(), "wtm")
 
 	svc := &Direct{
 		goos:           "linux",
 		goarch:         "amd64",
-		apiBaseURL:     server.URL + "/repos/takubii/git-worktree-opener",
+		apiBaseURL:     server.URL + "/repos/takubii/worktree-manager",
 		httpClient:     server.Client(),
 		executablePath: func() (string, error) { return targetPath, nil },
 		commandContext: exec.CommandContext,
@@ -79,15 +79,15 @@ func TestDirectUpdate_UnixLatestReplacesBinary(t *testing.T) {
 func TestDirectUpdate_UsesTagEndpointWhenVersionSpecified(t *testing.T) {
 	t.Parallel()
 
-	archiveName := "git-worktree-opener_v1.2.3_windows_amd64.zip"
-	archive := buildZipArchive(t, "wto.exe", []byte("new-binary"))
+	archiveName := "worktree-manager_v1.2.3_windows_amd64.zip"
+	archive := buildZipArchive(t, "wtm.exe", []byte("new-binary"))
 	archiveHash := sha256Hex(archive)
 	checksums := archiveHash + "  " + archiveName + "\n"
 
 	var requestedPath string
 	server := newReleaseServer(
 		t,
-		"/repos/takubii/git-worktree-opener/releases/tags/v1.2.3",
+		"/repos/takubii/worktree-manager/releases/tags/v1.2.3",
 		"v1.2.3",
 		archiveName,
 		archive,
@@ -105,10 +105,10 @@ func TestDirectUpdate_UsesTagEndpointWhenVersionSpecified(t *testing.T) {
 	svc := &Direct{
 		goos:       "windows",
 		goarch:     "amd64",
-		apiBaseURL: server.URL + "/repos/takubii/git-worktree-opener",
+		apiBaseURL: server.URL + "/repos/takubii/worktree-manager",
 		httpClient: server.Client(),
 		executablePath: func() (string, error) {
-			return filepath.Join(t.TempDir(), "wto.exe"), nil
+			return filepath.Join(t.TempDir(), "wtm.exe"), nil
 		},
 		commandContext: exec.CommandContext,
 		startCommand:   (*exec.Cmd).Start,
@@ -123,7 +123,7 @@ func TestDirectUpdate_UsesTagEndpointWhenVersionSpecified(t *testing.T) {
 			if filepath.Ext(stagedBinaryPath) != ".exe" {
 				t.Fatalf("unexpected staged binary path: %s", stagedBinaryPath)
 			}
-			if !strings.HasSuffix(strings.ToLower(targetBinaryPath), "wto.exe") {
+			if !strings.HasSuffix(strings.ToLower(targetBinaryPath), "wtm.exe") {
 				t.Fatalf("unexpected target binary path: %s", targetBinaryPath)
 			}
 			return nil
@@ -142,7 +142,7 @@ func TestDirectUpdate_UsesTagEndpointWhenVersionSpecified(t *testing.T) {
 	if replaceCalls != 1 {
 		t.Fatalf("expected replaceWindows call once, got %d", replaceCalls)
 	}
-	if requestedPath != "/repos/takubii/git-worktree-opener/releases/tags/v1.2.3" {
+	if requestedPath != "/repos/takubii/worktree-manager/releases/tags/v1.2.3" {
 		t.Fatalf("unexpected requested path: %q", requestedPath)
 	}
 }
@@ -150,13 +150,13 @@ func TestDirectUpdate_UsesTagEndpointWhenVersionSpecified(t *testing.T) {
 func TestDirectUpdate_ReturnsErrorOnChecksumMismatch(t *testing.T) {
 	t.Parallel()
 
-	archiveName := "git-worktree-opener_v9.9.9_linux_amd64.tar.gz"
-	archive := buildTarGzArchive(t, "wto", []byte("new-binary"))
+	archiveName := "worktree-manager_v9.9.9_linux_amd64.tar.gz"
+	archive := buildTarGzArchive(t, "wtm", []byte("new-binary"))
 	checksums := "0000000000000000000000000000000000000000000000000000000000000000  " + archiveName + "\n"
 
 	server := newReleaseServer(
 		t,
-		"/repos/takubii/git-worktree-opener/releases/latest",
+		"/repos/takubii/worktree-manager/releases/latest",
 		"v9.9.9",
 		archiveName,
 		archive,
@@ -168,10 +168,10 @@ func TestDirectUpdate_ReturnsErrorOnChecksumMismatch(t *testing.T) {
 	svc := &Direct{
 		goos:       "linux",
 		goarch:     "amd64",
-		apiBaseURL: server.URL + "/repos/takubii/git-worktree-opener",
+		apiBaseURL: server.URL + "/repos/takubii/worktree-manager",
 		httpClient: server.Client(),
 		executablePath: func() (string, error) {
-			return filepath.Join(t.TempDir(), "wto"), nil
+			return filepath.Join(t.TempDir(), "wtm"), nil
 		},
 		commandContext: exec.CommandContext,
 		startCommand:   (*exec.Cmd).Start,

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/takubii/git-worktree-opener/internal/doctor"
+	"github.com/takubii/worktree-manager/internal/doctor"
 )
 
 type fakeDoctorService struct {

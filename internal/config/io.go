@@ -9,32 +9,19 @@ import (
 )
 
 type rawConfig struct {
-	Remote              *string  `json:"remote"`
-	BaseBranch          *string  `json:"baseBranch"`
-	WorktreeDirTemplate *string  `json:"worktreeDirTemplate"`
-	New                 *rawNew  `json:"new"`
-	Open                *rawOpen `json:"open"`
-	Tmux                *rawTmux `json:"tmux"`
-	RM                  *rawRM   `json:"rm"`
+	Remote              *string    `json:"remote"`
+	BaseBranch          *string    `json:"baseBranch"`
+	WorktreeDirTemplate *string    `json:"worktreeDirTemplate"`
+	Create              *rawCreate `json:"create"`
+	Remove              *rawRemove `json:"remove"`
 }
 
-type rawNew struct {
+type rawCreate struct {
 	Fetch *bool `json:"fetch"`
 	Prune *bool `json:"prune"`
 }
 
-type rawOpen struct {
-	Default          *string `json:"default"`
-	Window           *string `json:"window"`
-	Prune            *bool   `json:"prune"`
-	TerminalProvider *string `json:"terminalProvider"`
-}
-
-type rawTmux struct {
-	Mode *string `json:"mode"`
-}
-
-type rawRM struct {
+type rawRemove struct {
 	DeleteBranch *string `json:"deleteBranch"`
 }
 

@@ -25,7 +25,7 @@ type Report struct {
 	HasCritical bool
 }
 
-// Service runs environment diagnostics for wto.
+// Service runs environment diagnostics for wtm.
 type Service interface {
 	Run(ctx context.Context) Report
 }

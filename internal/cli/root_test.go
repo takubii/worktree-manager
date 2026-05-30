@@ -25,20 +25,17 @@ func TestNewRootCmd_HelpIncludesListCommand(t *testing.T) {
 	if !strings.Contains(helpText, "list") {
 		t.Fatalf("help text does not include list command:\n%s", helpText)
 	}
-	if !strings.Contains(helpText, "open") {
-		t.Fatalf("help text does not include open command:\n%s", helpText)
+	if !strings.Contains(helpText, "create") {
+		t.Fatalf("help text does not include create command:\n%s", helpText)
 	}
-	if !strings.Contains(helpText, "new") {
-		t.Fatalf("help text does not include new command:\n%s", helpText)
+	if !strings.Contains(helpText, "path") {
+		t.Fatalf("help text does not include path command:\n%s", helpText)
 	}
-	if !strings.Contains(helpText, "rm") {
-		t.Fatalf("help text does not include rm command:\n%s", helpText)
+	if !strings.Contains(helpText, "remove") {
+		t.Fatalf("help text does not include remove command:\n%s", helpText)
 	}
 	if !strings.Contains(helpText, "config") {
 		t.Fatalf("help text does not include config command:\n%s", helpText)
-	}
-	if !strings.Contains(helpText, "enter") {
-		t.Fatalf("help text does not include enter command:\n%s", helpText)
 	}
 	if !strings.Contains(helpText, "update") {
 		t.Fatalf("help text does not include update command:\n%s", helpText)

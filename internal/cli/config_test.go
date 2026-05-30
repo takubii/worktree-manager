@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/takubii/git-worktree-opener/internal/config"
+	"github.com/takubii/worktree-manager/internal/config"
 )
 
 func TestConfigInitCommand_InitializesGlobalConfig(t *testing.T) {
@@ -18,7 +18,7 @@ func TestConfigInitCommand_InitializesGlobalConfig(t *testing.T) {
 	var stderr bytes.Buffer
 	cfgProvider := &fakeConfigProvider{
 		cfg:      config.DefaultConfig(),
-		initPath: "C:/Users/main/AppData/Roaming/git-worktree-opener/config.json",
+		initPath: "C:/Users/main/AppData/Roaming/worktree-manager/config.json",
 	}
 
 	cmd := NewRootCmd(Dependencies{
@@ -48,7 +48,7 @@ func TestConfigInitCommand_PassesForceFlag(t *testing.T) {
 
 	cfgProvider := &fakeConfigProvider{
 		cfg:      config.DefaultConfig(),
-		initPath: "C:/Users/main/AppData/Roaming/git-worktree-opener/config.json",
+		initPath: "C:/Users/main/AppData/Roaming/worktree-manager/config.json",
 	}
 
 	cmd := NewRootCmd(Dependencies{
@@ -76,11 +76,11 @@ func TestConfigShowCommand_PrintsEffectiveConfigJSON(t *testing.T) {
 			Remote:              "upstream",
 			BaseBranch:          "develop",
 			WorktreeDirTemplate: "{repoRoot}/../worktrees/{branch}",
-			Open: config.Open{
-				Default: "vscode",
-				Window:  "reuse",
+			Create: config.Create{
+				Fetch: false,
+				Prune: true,
 			},
-			RM: config.RM{
+			Remove: config.Remove{
 				DeleteBranch: "force",
 			},
 		},

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/takubii/git-worktree-opener/internal/execerr"
+	"github.com/takubii/worktree-manager/internal/execerr"
 )
 
 func replaceBinaryWindows(
@@ -28,7 +28,7 @@ func replaceBinaryWindows(
 		return execerr.Build(
 			"cmd /c "+scriptPath,
 			err.Error(),
-			"run `wto update` again or copy the downloaded wto.exe over your current binary manually",
+			"run `wtm update` again or copy the downloaded wtm.exe over your current binary manually",
 		)
 	}
 
@@ -36,7 +36,7 @@ func replaceBinaryWindows(
 }
 
 func writeWindowsReplaceScript(stagedBinaryPath string, targetBinaryPath string) (string, error) {
-	path := filepath.Join(os.TempDir(), fmt.Sprintf("wto-replace-%d.cmd", os.Getpid()))
+	path := filepath.Join(os.TempDir(), fmt.Sprintf("wtm-replace-%d.cmd", os.Getpid()))
 	content := buildWindowsReplaceScript(stagedBinaryPath, targetBinaryPath)
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		return "", fmt.Errorf("failed to write Windows update helper script: %w", err)
@@ -58,10 +58,10 @@ func buildWindowsReplaceScript(stagedBinaryPath string, targetBinaryPath string)
 		"  copy /Y \"%SOURCE%\" \"%TARGET%\" >nul 2>nul && goto :done",
 		"  timeout /T 1 /NOBREAK >nul",
 		")",
-		"echo failed to replace wto.exe automatically. Close running wto processes and retry update.",
+		"echo failed to replace wtm.exe automatically. Close running wtm processes and retry update.",
 		"goto :cleanup",
 		":done",
-		"echo wto update completed. Run `wto --version` in a new terminal.",
+		"echo wtm update completed. Run `wtm --version` in a new terminal.",
 		":cleanup",
 		"del /F /Q \"%SOURCE%\" >nul 2>nul",
 		"del /F /Q \"%~f0\" >nul 2>nul",

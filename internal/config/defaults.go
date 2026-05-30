@@ -8,7 +8,7 @@ const (
 	// DefaultWorktreeDirTemplate is the built-in worktree directory template.
 	DefaultWorktreeDirTemplate = "{repoParent}/worktrees/{branch}"
 
-	// DeleteBranchNone skips local branch deletion in rm.
+	// DeleteBranchNone skips local branch deletion in remove.
 	DeleteBranchNone = "none"
 	// DeleteBranchSafe uses `git branch -d`.
 	DeleteBranchSafe = "safe"
@@ -22,20 +22,11 @@ func DefaultConfig() Config {
 		Remote:              DefaultRemote,
 		BaseBranch:          DefaultBaseBranch,
 		WorktreeDirTemplate: DefaultWorktreeDirTemplate,
-		New: New{
+		Create: Create{
 			Fetch: true,
 			Prune: true,
 		},
-		Open: Open{
-			Default:          DefaultOpenKind,
-			Window:           DefaultOpenWindow,
-			Prune:            true,
-			TerminalProvider: DefaultOpenTerminalProvider,
-		},
-		Tmux: Tmux{
-			Mode: DefaultTmuxMode,
-		},
-		RM: RM{
+		Remove: Remove{
 			DeleteBranch: DeleteBranchSafe,
 		},
 	}

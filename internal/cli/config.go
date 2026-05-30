@@ -6,13 +6,13 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/takubii/git-worktree-opener/internal/config"
+	"github.com/takubii/worktree-manager/internal/config"
 )
 
 func newConfigCmd(deps Dependencies) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "config",
-		Short: "Manage wto configuration",
+		Short: "Manage wtm configuration",
 		Args:  cobra.NoArgs,
 	}
 

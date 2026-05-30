@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/takubii/git-worktree-opener/internal/buildinfo"
-	"github.com/takubii/git-worktree-opener/internal/cli"
-	"github.com/takubii/git-worktree-opener/internal/config"
-	"github.com/takubii/git-worktree-opener/internal/git"
+	"github.com/takubii/worktree-manager/internal/buildinfo"
+	"github.com/takubii/worktree-manager/internal/cli"
+	"github.com/takubii/worktree-manager/internal/config"
+	"github.com/takubii/worktree-manager/internal/git"
 )
 
 func main() {

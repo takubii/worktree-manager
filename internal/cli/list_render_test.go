@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/takubii/git-worktree-opener/internal/config"
+	"github.com/takubii/worktree-manager/internal/config"
 )
 
 func TestBuildListTableWidths_AdjustsBranchWidthToContent(t *testing.T) {

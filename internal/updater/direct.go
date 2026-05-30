@@ -22,7 +22,7 @@ type windowsReplaceFunc func(
 	targetBinaryPath string,
 ) error
 
-// Direct updates wto by downloading release assets from GitHub directly.
+// Direct updates wtm by downloading release assets from GitHub directly.
 type Direct struct {
 	goos            string
 	goarch          string
@@ -54,7 +54,7 @@ func NewDirect() Service {
 	}
 }
 
-// Update updates wto to the latest release unless a specific version is provided.
+// Update updates wtm to the latest release unless a specific version is provided.
 func (d *Direct) Update(ctx context.Context, req Request) (Result, error) {
 	if d.httpClient == nil {
 		return Result{}, fmt.Errorf("updater HTTP client is not configured")
@@ -102,7 +102,7 @@ func (d *Direct) Update(ctx context.Context, req Request) (Result, error) {
 		return Result{}, fmt.Errorf("release asset %s was not found. Verify release assets and retry", checksumsAsset)
 	}
 
-	workDir, err := os.MkdirTemp("", "wto-update-*")
+	workDir, err := os.MkdirTemp("", "wtm-update-*")
 	if err != nil {
 		return Result{}, fmt.Errorf("failed to create updater working directory: %w", err)
 	}
@@ -132,14 +132,14 @@ func (d *Direct) Update(ctx context.Context, req Request) (Result, error) {
 
 	targetPath, err := d.executablePath()
 	if err != nil {
-		return Result{}, fmt.Errorf("failed to resolve current wto binary path: %w", err)
+		return Result{}, fmt.Errorf("failed to resolve current wtm binary path: %w", err)
 	}
 
 	if d.goos == "windows" {
 		if d.replaceWindows == nil {
 			return Result{}, fmt.Errorf("updater windows replace function is not configured")
 		}
-		stagedPath := filepath.Join(os.TempDir(), fmt.Sprintf("wto-update-%d-%d.exe", os.Getpid(), d.nowUnixNanoFunc()))
+		stagedPath := filepath.Join(os.TempDir(), fmt.Sprintf("wtm-update-%d-%d.exe", os.Getpid(), d.nowUnixNanoFunc()))
 		if err := copyFile(binaryPath, stagedPath, 0o755); err != nil {
 			return Result{}, fmt.Errorf("failed to stage updated Windows binary: %w", err)
 		}

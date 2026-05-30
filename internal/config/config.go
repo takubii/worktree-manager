@@ -2,38 +2,23 @@ package config
 
 import "context"
 
-// Config stores effective runtime settings for wto.
+// Config stores effective runtime settings for wtm.
 type Config struct {
 	Remote              string `json:"remote"`
 	BaseBranch          string `json:"baseBranch"`
 	WorktreeDirTemplate string `json:"worktreeDirTemplate"`
-	New                 New    `json:"new"`
-	Open                Open   `json:"open"`
-	Tmux                Tmux   `json:"tmux"`
-	RM                  RM     `json:"rm"`
+	Create              Create `json:"create"`
+	Remove              Remove `json:"remove"`
 }
 
-// New stores defaults for `wto new`.
-type New struct {
+// Create stores defaults for `wtm create`.
+type Create struct {
 	Fetch bool `json:"fetch"`
 	Prune bool `json:"prune"`
 }
 
-// Open stores opener defaults.
-type Open struct {
-	Default          string `json:"default"`
-	Window           string `json:"window"`
-	Prune            bool   `json:"prune"`
-	TerminalProvider string `json:"terminalProvider"`
-}
-
-// Tmux stores tmux optimization defaults.
-type Tmux struct {
-	Mode string `json:"mode"`
-}
-
-// RM stores removal defaults.
-type RM struct {
+// Remove stores removal defaults.
+type Remove struct {
 	DeleteBranch string `json:"deleteBranch"`
 }
 

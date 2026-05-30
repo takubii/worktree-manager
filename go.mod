@@ -1,4 +1,4 @@
-module github.com/takubii/git-worktree-opener
+module github.com/takubii/worktree-manager
 
 go 1.25.0
 

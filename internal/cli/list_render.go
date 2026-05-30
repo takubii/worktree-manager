@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/takubii/git-worktree-opener/internal/config"
-	"github.com/takubii/git-worktree-opener/internal/git"
+	"github.com/takubii/worktree-manager/internal/config"
+	"github.com/takubii/worktree-manager/internal/git"
 )
 
 type listRow struct {

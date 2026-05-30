@@ -8,15 +8,13 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/takubii/git-worktree-opener/internal/config"
-	"github.com/takubii/git-worktree-opener/internal/git"
-	"github.com/takubii/git-worktree-opener/internal/opener"
-	"github.com/takubii/git-worktree-opener/internal/selector"
+	"github.com/takubii/worktree-manager/internal/config"
+	"github.com/takubii/worktree-manager/internal/git"
+	"github.com/takubii/worktree-manager/internal/selector"
 )
 
 const (
 	defaultBaseBranch = config.DefaultBaseBranch
-	newOpenNone       = "none"
 	branchLinkedLabel = " [worktree]"
 )
 
@@ -25,17 +23,14 @@ type branchCandidate struct {
 	Display string
 }
 
-func newNewCmd(deps Dependencies) *cobra.Command {
+func newCreateCmd(deps Dependencies) *cobra.Command {
 	var baseBranch string
-	var openerName string
-	var terminalProvider string
-	var tmuxModeRaw string
 	var noFetch bool
 	var noPrune bool
 	var outputRaw string
 
 	cmd := &cobra.Command{
-		Use:   "new [branch]",
+		Use:   "create [branch]",
 		Short: "Create a new worktree",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -47,19 +42,19 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 			cfg := deps.Config.Load(cmd.Context())
 			resolvedNoPrune := noPrune
 			if !cmd.Flags().Changed("no-prune") {
-				resolvedNoPrune = !cfg.New.Prune
+				resolvedNoPrune = !cfg.Create.Prune
 			}
 			resolvedNoFetch := noFetch
 			if !cmd.Flags().Changed("no-fetch") {
-				resolvedNoFetch = !cfg.New.Fetch
+				resolvedNoFetch = !cfg.Create.Fetch
 			}
 
 			if !resolvedNoPrune {
-				tracef(cmd.Context(), "new: running `git worktree prune --expire now`")
+				tracef(cmd.Context(), "create: running `git worktree prune --expire now`")
 				if err := deps.Git.WorktreePrune(cmd.Context()); err != nil {
 					return err
 				}
-				tracef(cmd.Context(), "new: prune completed")
+				tracef(cmd.Context(), "create: prune completed")
 			}
 
 			remoteName := cfg.Remote
@@ -76,30 +71,7 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 				return fmt.Errorf("base branch is empty. Set --base or `baseBranch` in config to a valid branch and retry")
 			}
 
-			resolvedOpener := strings.ToLower(strings.TrimSpace(openerName))
-			resolvedTerminalProvider := strings.ToLower(strings.TrimSpace(terminalProvider))
-			if !cmd.Flags().Changed("terminal-provider") {
-				resolvedTerminalProvider = cfg.Open.TerminalProvider
-			}
-			if !cmd.Flags().Changed("tmux-mode") {
-				tmuxModeRaw = cfg.Tmux.Mode
-			}
-			tracef(cmd.Context(), "new: opener=%q terminalProvider=%q tmuxMode=%q output=%s base=%q noFetch=%v noPrune=%v", openerName, terminalProvider, tmuxModeRaw, outputMode, baseBranch, noFetch, noPrune)
-			if cmd.Flags().Changed("terminal-provider") && resolvedOpener != opener.KindTerminal {
-				return fmt.Errorf("`--terminal-provider` can only be used with `--open terminal`. Set `--open terminal` and retry")
-			}
-			if cmd.Flags().Changed("tmux-mode") && resolvedOpener != opener.KindTerminal {
-				return fmt.Errorf("`--tmux-mode` can only be used with `--open terminal`. Set `--open terminal` and retry")
-			}
-			tmuxMode, err := opener.ParseTmuxMode(tmuxModeRaw)
-			if err != nil {
-				return err
-			}
-			if resolvedOpener != newOpenNone {
-				if err := validateExplicitOpenerAvailability(cmd, deps.LookPath, resolvedOpener); err != nil {
-					return err
-				}
-			}
+			tracef(cmd.Context(), "create: output=%s base=%q noFetch=%v noPrune=%v", outputMode, baseBranch, noFetch, noPrune)
 
 			targetBranch := ""
 			if len(args) == 1 {
@@ -107,14 +79,14 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 			}
 
 			if !resolvedNoFetch {
-				tracef(cmd.Context(), "new: running `git fetch %s --prune`", remoteName)
+				tracef(cmd.Context(), "create: running `git fetch %s --prune`", remoteName)
 				if err := deps.Git.FetchPrune(cmd.Context(), remoteName); err != nil {
 					return err
 				}
-				tracef(cmd.Context(), "new: fetch completed")
+				tracef(cmd.Context(), "create: fetch completed")
 			}
 
-			tracef(cmd.Context(), "new: resolving repository root and branches")
+			tracef(cmd.Context(), "create: resolving repository root and branches")
 			repoRoot, err := deps.Git.RepoRoot(cmd.Context())
 			if err != nil {
 				return err
@@ -141,7 +113,7 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			tracef(cmd.Context(), "new: resolved branch=%s startPoint=%s", resolvedBranch, startPoint)
+			tracef(cmd.Context(), "create: resolved branch=%s startPoint=%s", resolvedBranch, startPoint)
 
 			worktreePath, err := config.RenderWorktreeDir(cfg.WorktreeDirTemplate, repoRoot, resolvedBranch)
 			if err != nil {
@@ -163,42 +135,18 @@ func newNewCmd(deps Dependencies) *cobra.Command {
 			}); err != nil {
 				return err
 			}
-			tracef(cmd.Context(), "new: worktree added path=%s", worktreePath)
-
-			opened := false
-			if resolvedOpener != newOpenNone {
-				windowMode, err := opener.ParseWindowMode(cfg.Open.Window)
-				if err != nil {
-					return fmt.Errorf("invalid config open.window value: %w", err)
-				}
-
-				tracef(cmd.Context(), "new: invoking opener kind=%s terminalProvider=%s tmuxMode=%s path=%s window=%s", resolvedOpener, resolvedTerminalProvider, tmuxMode, worktreePath, windowMode)
-				openResult, err := openPathWithResult(cmd.Context(), deps.Opener, resolvedOpener, worktreePath, windowMode, resolvedTerminalProvider, tmuxMode)
-				if err != nil {
-					return err
-				}
-				for _, warning := range openResult.Warnings {
-					if _, warnErr := fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", warning); warnErr != nil {
-						return fmt.Errorf("failed to write opener warning: %w", warnErr)
-					}
-				}
-				opened = true
-			}
+			tracef(cmd.Context(), "create: worktree added path=%s", worktreePath)
 
 			return writeCommandOutput(cmd.OutOrStdout(), outputMode, commandOutput{
-				Command: "new",
+				Command: "create",
 				Path:    worktreePath,
 				Branch:  resolvedBranch,
 				Created: true,
-				Opened:  opened,
 			})
 		},
 	}
 
 	cmd.Flags().StringVar(&baseBranch, "base", defaultBaseBranch, "base branch used when creating a new branch")
-	cmd.Flags().StringVar(&openerName, "open", newOpenNone, "opener to use after creation: none|"+config.SupportedOpenKindsText)
-	cmd.Flags().StringVar(&terminalProvider, "terminal-provider", config.DefaultOpenTerminalProvider, "terminal provider: "+config.SupportedTerminalProvidersText)
-	cmd.Flags().StringVar(&tmuxModeRaw, "tmux-mode", config.DefaultTmuxMode, "tmux mode: "+config.SupportedTmuxModesText)
 	cmd.Flags().BoolVar(&noFetch, "no-fetch", false, "skip running git fetch <remote> --prune before branch resolution")
 	cmd.Flags().BoolVar(&noPrune, "no-prune", false, "skip running git worktree prune --expire now before processing")
 	cmd.Flags().StringVar(&outputRaw, "output", string(outputModeNone), "output mode: "+supportedOutputModesText)
@@ -223,14 +171,14 @@ func resolveTargetBranch(
 	if branchArg == "" {
 		linkedBranches, err := linkedWorktreeBranchSet(cmd, deps)
 		if err != nil {
-			tracef(cmd.Context(), "new: failed to resolve linked worktree branches for candidate labels: %v", err)
+			tracef(cmd.Context(), "create: failed to resolve linked worktree branches for candidate labels: %v", err)
 		}
 
 		candidates := branchCandidates(localBranches, remoteBranches, remoteName, linkedBranches)
 		if len(candidates) == 0 {
-			return "", "", fmt.Errorf("no branches available. Create or fetch branches, then run `wto new` again")
+			return "", "", fmt.Errorf("no branches available. Create or fetch branches, then run `wtm create` again")
 		}
-		tracef(cmd.Context(), "new: interactive branch selection from %d candidates", len(candidates))
+		tracef(cmd.Context(), "create: interactive branch selection from %d candidates", len(candidates))
 		candidateDisplays := make([]string, 0, len(candidates))
 		displayToBranch := make(map[string]string, len(candidates))
 		for _, candidate := range candidates {
@@ -240,7 +188,7 @@ func resolveTargetBranch(
 
 		creator, supportsCreate := deps.Selector.(selector.SelectOrCreator)
 		if supportsCreate {
-			tracef(cmd.Context(), "new: selector supports create flow")
+			tracef(cmd.Context(), "create: selector supports create flow")
 			result, err := creator.SelectOrCreate(
 				cmd.Context(),
 				"Select or enter a branch for the new worktree:",
@@ -266,7 +214,7 @@ func resolveTargetBranch(
 				}
 			}
 		} else {
-			tracef(cmd.Context(), "new: selector fallback select-only flow")
+			tracef(cmd.Context(), "create: selector fallback select-only flow")
 			selectedIndex, err := deps.Selector.Select(
 				cmd.Context(),
 				"Select a branch for the new worktree:",

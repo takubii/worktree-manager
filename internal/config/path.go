@@ -9,11 +9,11 @@ import (
 
 const (
 	// AppConfigDirName is the global config directory under os.UserConfigDir().
-	AppConfigDirName = "git-worktree-opener"
+	AppConfigDirName = "worktree-manager"
 	// GlobalConfigFileName is the global config filename.
 	GlobalConfigFileName = "config.json"
 	// RepoConfigFileName is the repository-local override config filename.
-	RepoConfigFileName = ".wtoconfig.json"
+	RepoConfigFileName = ".wtmconfig.json"
 )
 
 func resolveGlobalConfigPath(userConfigDir func() (string, error)) (string, error) {

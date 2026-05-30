@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/takubii/git-worktree-opener/internal/doctor"
+	"github.com/takubii/worktree-manager/internal/doctor"
 )
 
 func newDoctorCmd(deps Dependencies) *cobra.Command {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/takubii/git-worktree-opener/internal/git"
+	"github.com/takubii/worktree-manager/internal/git"
 )
 
 func findActiveWorktreeByBranch(worktrees []git.Worktree, targetBranch string, commandName string) (git.Worktree, error) {
@@ -25,7 +25,7 @@ func findActiveWorktreeByBranch(worktrees []git.Worktree, targetBranch string, c
 
 	if len(matches) == 0 {
 		return git.Worktree{}, fmt.Errorf(
-			"branch %q does not have a linked active worktree. Run `wto new %s` to create one, or run `wto list` to inspect available worktrees, then retry",
+			"branch %q does not have a linked active worktree. Run `wtm create %s` to create one, or run `wtm list` to inspect available worktrees, then retry",
 			targetBranch,
 			targetBranch,
 		)
@@ -37,7 +37,7 @@ func findActiveWorktreeByBranch(worktrees []git.Worktree, targetBranch string, c
 	match := matches[0]
 	if _, err := os.Stat(match.Path); err != nil {
 		if os.IsNotExist(err) {
-			return git.Worktree{}, fmt.Errorf("worktree path for branch %q does not exist locally: %s. Run `wto list` to inspect entries and `wto rm` to clean stale entries, then retry", targetBranch, match.Path)
+			return git.Worktree{}, fmt.Errorf("worktree path for branch %q does not exist locally: %s. Run `wtm list` to inspect entries and `wtm remove` to clean stale entries, then retry", targetBranch, match.Path)
 		}
 		return git.Worktree{}, fmt.Errorf("failed to inspect worktree path %q for branch %q: %w", match.Path, targetBranch, err)
 	}

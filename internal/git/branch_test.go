@@ -51,7 +51,7 @@ func TestExecClientRepoRoot_UsesCanonicalRootFromGitCommonDir(t *testing.T) {
 		cmd.Env = append(
 			os.Environ(),
 			"GO_WANT_HELPER_PROCESS=1",
-			"HELPER_STDOUT=C:/Work/Repos/worktrees/feature/test2\nC:/Work/Repos/git-worktree-opener/.git\n",
+			"HELPER_STDOUT=C:/Work/Repos/worktrees/feature/test2\nC:/Work/Repos/worktree-manager/.git\n",
 		)
 		return cmd
 	})
@@ -61,7 +61,7 @@ func TestExecClientRepoRoot_UsesCanonicalRootFromGitCommonDir(t *testing.T) {
 		t.Fatalf("RepoRoot() returned error: %v", err)
 	}
 
-	if root != "C:/Work/Repos/git-worktree-opener" {
+	if root != "C:/Work/Repos/worktree-manager" {
 		t.Fatalf("unexpected canonical repo root: %q", root)
 	}
 }

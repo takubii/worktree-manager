@@ -5,7 +5,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/takubii/git-worktree-opener/internal/execerr"
+	"github.com/takubii/worktree-manager/internal/execerr"
 )
 
 func buildGitCommandError(runErr error, stderrOutput string, command string, nextAction string) error {

@@ -31,12 +31,12 @@ func TestVerboseFlag_ListWritesTraceToStderr(t *testing.T) {
 	}
 }
 
-func TestVerboseFlag_OpenKeepsOutputPathContract(t *testing.T) {
+func TestVerboseFlag_PathKeepsOutputPathContract(t *testing.T) {
 	t.Parallel()
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	repoPath := toPosixPathForOpen(t.TempDir())
+	repoPath := strings.ReplaceAll(t.TempDir(), "\\", "/")
 	gitClient := &fakeGitClient{
 		output: "worktree " + repoPath + "\nHEAD abc\nbranch refs/heads/main\n\n",
 	}
@@ -45,10 +45,9 @@ func TestVerboseFlag_OpenKeepsOutputPathContract(t *testing.T) {
 		Stdout:   &stdout,
 		Stderr:   &stderr,
 		Git:      gitClient,
-		Selector: &fakeSelector{index: 0},
-		Opener:   &fakeOpener{},
+		Selector: fakeSelector{index: 0},
 	})
-	cmd.SetArgs([]string{"--verbose", "open", "--output", "path"})
+	cmd.SetArgs([]string{"--verbose", "path"})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Execute() returned error: %v", err)
@@ -57,8 +56,8 @@ func TestVerboseFlag_OpenKeepsOutputPathContract(t *testing.T) {
 	if got := strings.TrimSpace(stdout.String()); got != repoPath {
 		t.Fatalf("unexpected path output: %q", got)
 	}
-	if !strings.Contains(stderr.String(), "[trace] open: invoking opener") {
-		t.Fatalf("expected open trace output, got: %s", stderr.String())
+	if !strings.Contains(stderr.String(), "[trace] path: running `git worktree list --porcelain`") {
+		t.Fatalf("expected path trace output, got: %s", stderr.String())
 	}
 }
 

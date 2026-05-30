@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/takubii/git-worktree-opener/internal/execerr"
+	"github.com/takubii/worktree-manager/internal/execerr"
 )
 
 func (s *defaultSelector) selectWithFZF(ctx context.Context, prompt string, options []string) (int, error) {

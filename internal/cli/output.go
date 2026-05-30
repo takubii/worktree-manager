@@ -21,8 +21,7 @@ type commandOutput struct {
 	Command string `json:"command"`
 	Path    string `json:"path"`
 	Branch  string `json:"branch"`
-	Created bool   `json:"created"`
-	Opened  bool   `json:"opened"`
+	Created bool   `json:"created,omitempty"`
 }
 
 func parseOutputMode(raw string) (outputMode, error) {

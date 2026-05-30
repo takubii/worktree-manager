@@ -1,195 +1,68 @@
 package config
 
 import (
-	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 )
 
-func TestRenderWorktreeDir_ReplacesPlaceholders(t *testing.T) {
-	t.Parallel()
-
-	repoRoot := filepath.Join(t.TempDir(), "repo")
-	got, err := RenderWorktreeDir("{repoParent}/worktrees/{branch}", repoRoot, "feature/x")
-	if err != nil {
-		t.Fatalf("RenderWorktreeDir() returned error: %v", err)
-	}
-
-	expected := filepath.Clean(filepath.Join(filepath.Dir(repoRoot), "worktrees", "feature", "x"))
-	if filepath.Clean(got) != expected {
-		t.Fatalf("unexpected rendered path: want=%q got=%q", expected, filepath.Clean(got))
-	}
-}
-
-func TestRenderWorktreeDir_ReturnsErrorForUnknownPlaceholder(t *testing.T) {
-	t.Parallel()
-
-	_, err := RenderWorktreeDir("{repoRoot}/worktrees/{unknown}", "/repo/project", "feature/x")
-	if err == nil {
-		t.Fatal("expected RenderWorktreeDir() to return error")
-	}
-	if !strings.Contains(err.Error(), "not supported") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestRenderWorktreeDir_ReturnsErrorForPlaceholderWithHyphen(t *testing.T) {
-	t.Parallel()
-
-	_, err := RenderWorktreeDir("{repoRoot}/worktrees/{repo-parent}", "/repo/project", "feature/x")
-	if err == nil {
-		t.Fatal("expected RenderWorktreeDir() to return error")
-	}
-	if !strings.Contains(err.Error(), "not supported") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestNormalizeOverride_ReadsBooleanFields(t *testing.T) {
+func TestNormalizeOverride_ReadsCreateAndRemove(t *testing.T) {
 	t.Parallel()
 
 	fetch := false
 	prune := false
-	openPrune := false
+	deleteBranch := DeleteBranchForce
 	override, err := normalizeOverride(rawConfig{
-		New: &rawNew{
+		Create: &rawCreate{
 			Fetch: &fetch,
 			Prune: &prune,
 		},
-		Open: &rawOpen{
-			Prune: &openPrune,
+		Remove: &rawRemove{
+			DeleteBranch: &deleteBranch,
 		},
 	})
 	if err != nil {
 		t.Fatalf("normalizeOverride() returned error: %v", err)
 	}
-
-	if override.NewFetch == nil || *override.NewFetch {
-		t.Fatalf("unexpected NewFetch override: %+v", override.NewFetch)
+	if override.CreateFetch == nil || *override.CreateFetch {
+		t.Fatalf("unexpected CreateFetch override: %+v", override.CreateFetch)
 	}
-	if override.NewPrune == nil || *override.NewPrune {
-		t.Fatalf("unexpected NewPrune override: %+v", override.NewPrune)
+	if override.CreatePrune == nil || *override.CreatePrune {
+		t.Fatalf("unexpected CreatePrune override: %+v", override.CreatePrune)
 	}
-	if override.OpenPrune == nil || *override.OpenPrune {
-		t.Fatalf("unexpected OpenPrune override: %+v", override.OpenPrune)
+	if override.RemoveDeleteBranch == nil || *override.RemoveDeleteBranch != DeleteBranchForce {
+		t.Fatalf("unexpected RemoveDeleteBranch override: %+v", override.RemoveDeleteBranch)
 	}
 }
 
-func TestMergeConfig_AppliesBooleanOverrides(t *testing.T) {
+func TestMergeConfig_AppliesOverrides(t *testing.T) {
 	t.Parallel()
 
 	fetch := false
-	prune := false
-	openPrune := false
-
+	deleteBranch := DeleteBranchNone
 	got := mergeConfig(DefaultConfig(), configOverride{
-		NewFetch:  &fetch,
-		NewPrune:  &prune,
-		OpenPrune: &openPrune,
+		CreateFetch:        &fetch,
+		RemoveDeleteBranch: &deleteBranch,
 	})
-	want := DefaultConfig()
-	want.New.Fetch = false
-	want.New.Prune = false
-	want.Open.Prune = false
 
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("unexpected merged config:\nwant=%+v\ngot=%+v", want, got)
+	if got.Create.Fetch {
+		t.Fatalf("unexpected create.fetch: %v", got.Create.Fetch)
+	}
+	if got.Remove.DeleteBranch != DeleteBranchNone {
+		t.Fatalf("unexpected remove.deleteBranch: %q", got.Remove.DeleteBranch)
 	}
 }
 
-func TestNormalizeOverride_ReadsOpenTerminalProvider(t *testing.T) {
+func TestNormalizeOverride_ReturnsErrorForInvalidRemoveDeleteBranch(t *testing.T) {
 	t.Parallel()
 
-	provider := TerminalProviderWarp
-	override, err := normalizeOverride(rawConfig{
-		Open: &rawOpen{
-			TerminalProvider: &provider,
-		},
-	})
-	if err != nil {
-		t.Fatalf("normalizeOverride() returned error: %v", err)
-	}
-
-	if override.OpenTerminalProvider == nil || *override.OpenTerminalProvider != TerminalProviderWarp {
-		t.Fatalf("unexpected OpenTerminalProvider override: %+v", override.OpenTerminalProvider)
-	}
-}
-
-func TestNormalizeOverride_ReturnsErrorForInvalidTerminalProvider(t *testing.T) {
-	t.Parallel()
-
-	provider := "invalid-provider"
+	value := "invalid"
 	_, err := normalizeOverride(rawConfig{
-		Open: &rawOpen{
-			TerminalProvider: &provider,
-		},
+		Remove: &rawRemove{DeleteBranch: &value},
 	})
 	if err == nil {
-		t.Fatal("expected normalizeOverride() to return error")
+		t.Fatal("expected error")
 	}
-	if !strings.Contains(err.Error(), "open.terminalProvider") {
+	if !strings.Contains(err.Error(), "remove.deleteBranch") {
 		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestMergeConfig_AppliesOpenTerminalProviderOverride(t *testing.T) {
-	t.Parallel()
-
-	provider := TerminalProviderCMD
-	got := mergeConfig(DefaultConfig(), configOverride{
-		OpenTerminalProvider: &provider,
-	})
-
-	if got.Open.TerminalProvider != TerminalProviderCMD {
-		t.Fatalf("unexpected open.terminalProvider: %q", got.Open.TerminalProvider)
-	}
-}
-
-func TestNormalizeOverride_ReadsTmuxMode(t *testing.T) {
-	t.Parallel()
-
-	mode := TmuxModeSplit
-	override, err := normalizeOverride(rawConfig{
-		Tmux: &rawTmux{
-			Mode: &mode,
-		},
-	})
-	if err != nil {
-		t.Fatalf("normalizeOverride() returned error: %v", err)
-	}
-
-	if override.TmuxMode == nil || *override.TmuxMode != TmuxModeSplit {
-		t.Fatalf("unexpected TmuxMode override: %+v", override.TmuxMode)
-	}
-}
-
-func TestNormalizeOverride_ReturnsErrorForInvalidTmuxMode(t *testing.T) {
-	t.Parallel()
-
-	mode := "invalid-mode"
-	_, err := normalizeOverride(rawConfig{
-		Tmux: &rawTmux{
-			Mode: &mode,
-		},
-	})
-	if err == nil {
-		t.Fatal("expected normalizeOverride() to return error")
-	}
-	if !strings.Contains(err.Error(), "tmux.mode") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestMergeConfig_AppliesTmuxModeOverride(t *testing.T) {
-	t.Parallel()
-
-	mode := TmuxModeWindow
-	got := mergeConfig(DefaultConfig(), configOverride{
-		TmuxMode: &mode,
-	})
-
-	if got.Tmux.Mode != TmuxModeWindow {
-		t.Fatalf("unexpected tmux.mode: %q", got.Tmux.Mode)
 	}
 }

@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/takubii/git-worktree-opener/internal/updater"
+	"github.com/takubii/worktree-manager/internal/updater"
 )
 
 func newUpdateCmd(deps Dependencies) *cobra.Command {
@@ -12,7 +12,7 @@ func newUpdateCmd(deps Dependencies) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "update",
-		Short: "Update wto from GitHub Releases",
+		Short: "Update wtm from GitHub Releases",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if deps.Updater == nil {
@@ -33,7 +33,7 @@ func newUpdateCmd(deps Dependencies) *cobra.Command {
 			if result.Async {
 				if _, err := fmt.Fprintln(
 					cmd.OutOrStdout(),
-					"update started in background. Wait until it finishes, then run `wto --help`.",
+					"update started in background. Wait until it finishes, then run `wtm --help`.",
 				); err != nil {
 					return fmt.Errorf("failed to write update status: %w", err)
 				}

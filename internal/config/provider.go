@@ -120,7 +120,7 @@ func (p *fileProvider) InitGlobal(force bool) (string, error) {
 			return "", fmt.Errorf("config path points to a directory: %s. Remove it and retry", path)
 		}
 		if !force {
-			return "", fmt.Errorf("config file already exists at %s. Use `wto config init --force` to overwrite", path)
+			return "", fmt.Errorf("config file already exists at %s. Use `wtm config init --force` to overwrite", path)
 		}
 	case errors.Is(statErr, os.ErrNotExist):
 		// continue

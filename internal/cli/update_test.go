@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/takubii/git-worktree-opener/internal/updater"
+	"github.com/takubii/worktree-manager/internal/updater"
 )
 
 type fakeUpdater struct {

@@ -9,7 +9,7 @@ import (
 func newVersionCmd(deps Dependencies) *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
-		Short: "Print wto version",
+		Short: "Print wtm version",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if _, err := fmt.Fprintln(cmd.OutOrStdout(), deps.Version); err != nil {

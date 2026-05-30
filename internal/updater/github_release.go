@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-const userAgent = "git-worktree-opener-updater"
+const userAgent = "worktree-manager-updater"
 
 type githubRelease struct {
 	TagName string             `json:"tag_name"`

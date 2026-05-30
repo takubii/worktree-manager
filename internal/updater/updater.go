@@ -7,11 +7,11 @@ import (
 
 const (
 	repoOwner         = "takubii"
-	repoName          = "git-worktree-opener"
+	repoName          = "worktree-manager"
 	defaultAPIBaseURL = "https://api.github.com/repos/" + repoOwner + "/" + repoName
 	releaseAssetBase  = repoName
 	checksumsAsset    = "checksums.txt"
-	binaryBaseName    = "wto"
+	binaryBaseName    = "wtm"
 )
 
 // Request defines updater inputs.
@@ -26,7 +26,7 @@ type Result struct {
 	Async bool
 }
 
-// Service updates the current wto installation.
+// Service updates the current wtm installation.
 type Service interface {
 	Update(ctx context.Context, req Request) (Result, error)
 }

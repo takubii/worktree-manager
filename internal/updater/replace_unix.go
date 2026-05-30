@@ -15,7 +15,7 @@ func replaceBinaryUnix(sourcePath string, targetPath string) error {
 
 	if err := os.Rename(tmpPath, targetPath); err != nil {
 		_ = os.Remove(tmpPath)
-		return fmt.Errorf("failed to replace current wto binary. Close running processes and retry: %w", err)
+		return fmt.Errorf("failed to replace current wtm binary. Close running processes and retry: %w", err)
 	}
 
 	return nil

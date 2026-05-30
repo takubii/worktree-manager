@@ -5,24 +5,17 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-
-	"github.com/takubii/git-worktree-opener/internal/opener"
 )
 
 var placeholderPattern = regexp.MustCompile(`\{([^{}]+)\}`)
 
 type configOverride struct {
-	Remote               *string
-	BaseBranch           *string
-	WorktreeDirTemplate  *string
-	NewFetch             *bool
-	NewPrune             *bool
-	OpenDefault          *string
-	OpenWindow           *string
-	OpenPrune            *bool
-	OpenTerminalProvider *string
-	TmuxMode             *string
-	RMDeleteBranch       *string
+	Remote              *string
+	BaseBranch          *string
+	WorktreeDirTemplate *string
+	CreateFetch         *bool
+	CreatePrune         *bool
+	RemoveDeleteBranch  *string
 }
 
 func mergeConfig(base Config, override configOverride) Config {
@@ -37,29 +30,14 @@ func mergeConfig(base Config, override configOverride) Config {
 	if override.WorktreeDirTemplate != nil {
 		merged.WorktreeDirTemplate = *override.WorktreeDirTemplate
 	}
-	if override.NewFetch != nil {
-		merged.New.Fetch = *override.NewFetch
+	if override.CreateFetch != nil {
+		merged.Create.Fetch = *override.CreateFetch
 	}
-	if override.NewPrune != nil {
-		merged.New.Prune = *override.NewPrune
+	if override.CreatePrune != nil {
+		merged.Create.Prune = *override.CreatePrune
 	}
-	if override.OpenDefault != nil {
-		merged.Open.Default = *override.OpenDefault
-	}
-	if override.OpenWindow != nil {
-		merged.Open.Window = *override.OpenWindow
-	}
-	if override.OpenPrune != nil {
-		merged.Open.Prune = *override.OpenPrune
-	}
-	if override.OpenTerminalProvider != nil {
-		merged.Open.TerminalProvider = *override.OpenTerminalProvider
-	}
-	if override.TmuxMode != nil {
-		merged.Tmux.Mode = *override.TmuxMode
-	}
-	if override.RMDeleteBranch != nil {
-		merged.RM.DeleteBranch = *override.RMDeleteBranch
+	if override.RemoveDeleteBranch != nil {
+		merged.Remove.DeleteBranch = *override.RemoveDeleteBranch
 	}
 
 	return merged
@@ -86,45 +64,17 @@ func normalizeOverride(raw rawConfig) (configOverride, error) {
 	}
 	out.WorktreeDirTemplate = template
 
-	if raw.New != nil {
-		out.NewFetch = normalizeOptionalBool(raw.New.Fetch)
-		out.NewPrune = normalizeOptionalBool(raw.New.Prune)
+	if raw.Create != nil {
+		out.CreateFetch = normalizeOptionalBool(raw.Create.Fetch)
+		out.CreatePrune = normalizeOptionalBool(raw.Create.Prune)
 	}
 
-	if raw.Open != nil {
-		openDefault, err := normalizeOpenKind(raw.Open.Default)
+	if raw.Remove != nil {
+		deleteBranch, err := normalizeDeleteBranch(raw.Remove.DeleteBranch)
 		if err != nil {
 			return configOverride{}, err
 		}
-		out.OpenDefault = openDefault
-
-		openWindow, err := normalizeWindow(raw.Open.Window)
-		if err != nil {
-			return configOverride{}, err
-		}
-		out.OpenWindow = openWindow
-		out.OpenPrune = normalizeOptionalBool(raw.Open.Prune)
-
-		openTerminalProvider, err := normalizeTerminalProvider(raw.Open.TerminalProvider)
-		if err != nil {
-			return configOverride{}, err
-		}
-		out.OpenTerminalProvider = openTerminalProvider
-	}
-	if raw.Tmux != nil {
-		tmuxMode, err := normalizeTmuxMode(raw.Tmux.Mode)
-		if err != nil {
-			return configOverride{}, err
-		}
-		out.TmuxMode = tmuxMode
-	}
-
-	if raw.RM != nil {
-		deleteBranch, err := normalizeDeleteBranch(raw.RM.DeleteBranch)
-		if err != nil {
-			return configOverride{}, err
-		}
-		out.RMDeleteBranch = deleteBranch
+		out.RemoveDeleteBranch = deleteBranch
 	}
 
 	return out, nil
@@ -149,31 +99,6 @@ func normalizeNonEmptyString(field string, value *string) (*string, error) {
 	return &trimmed, nil
 }
 
-func normalizeOpenKind(value *string) (*string, error) {
-	if value == nil {
-		return nil, nil
-	}
-
-	trimmed := strings.ToLower(strings.TrimSpace(*value))
-	if _, ok := supportedOpenKinds[trimmed]; ok {
-		return &trimmed, nil
-	}
-
-	return nil, fmt.Errorf("open.default %q is invalid. Use one of: %s", *value, SupportedOpenKindsText)
-}
-
-func normalizeWindow(value *string) (*string, error) {
-	if value == nil {
-		return nil, nil
-	}
-
-	trimmed := strings.ToLower(strings.TrimSpace(*value))
-	if _, err := opener.ParseWindowMode(trimmed); err != nil {
-		return nil, fmt.Errorf("open.window is invalid: %w", err)
-	}
-	return &trimmed, nil
-}
-
 func normalizeDeleteBranch(value *string) (*string, error) {
 	if value == nil {
 		return nil, nil
@@ -184,34 +109,8 @@ func normalizeDeleteBranch(value *string) (*string, error) {
 	case DeleteBranchNone, DeleteBranchSafe, DeleteBranchForce:
 		return &trimmed, nil
 	default:
-		return nil, fmt.Errorf("rm.deleteBranch %q is invalid. Use one of: %s", *value, SupportedDeleteBranchModesText)
+		return nil, fmt.Errorf("remove.deleteBranch %q is invalid. Use one of: %s", *value, SupportedDeleteBranchModesText)
 	}
-}
-
-func normalizeTerminalProvider(value *string) (*string, error) {
-	if value == nil {
-		return nil, nil
-	}
-
-	trimmed := strings.ToLower(strings.TrimSpace(*value))
-	if _, ok := supportedTerminalProviders[trimmed]; ok {
-		return &trimmed, nil
-	}
-
-	return nil, fmt.Errorf("open.terminalProvider %q is invalid. Use one of: %s", *value, SupportedTerminalProvidersText)
-}
-
-func normalizeTmuxMode(value *string) (*string, error) {
-	if value == nil {
-		return nil, nil
-	}
-
-	trimmed := strings.ToLower(strings.TrimSpace(*value))
-	if _, ok := supportedTmuxModes[trimmed]; ok {
-		return &trimmed, nil
-	}
-
-	return nil, fmt.Errorf("tmux.mode %q is invalid. Use one of: %s", *value, SupportedTmuxModesText)
 }
 
 func normalizeWorktreeDirTemplate(value *string) (*string, error) {

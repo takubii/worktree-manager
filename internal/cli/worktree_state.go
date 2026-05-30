@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/takubii/git-worktree-opener/internal/git"
+	"github.com/takubii/worktree-manager/internal/git"
 )
 
 func splitPrunableWorktrees(worktrees []git.Worktree) ([]git.Worktree, []git.Worktree) {
@@ -24,7 +24,7 @@ func splitPrunableWorktrees(worktrees []git.Worktree) ([]git.Worktree, []git.Wor
 	return active, prunable
 }
 
-func splitUnavailableWorktreesForOpen(worktrees []git.Worktree) ([]git.Worktree, []git.Worktree, []git.Worktree) {
+func splitUnavailableWorktreesForPath(worktrees []git.Worktree) ([]git.Worktree, []git.Worktree, []git.Worktree) {
 	active := make([]git.Worktree, 0, len(worktrees))
 	prunable := make([]git.Worktree, 0)
 	missing := make([]git.Worktree, 0)
