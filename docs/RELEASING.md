@@ -35,7 +35,7 @@ Run a quick install validation for each supported installer.
 Windows PowerShell example:
 
 ```powershell
-$env:WTM_VERSION = "vX.Y.Z"
+$env:WTM_VERSION = "vX.Y.Z" # set this to the tag being verified
 iwr https://raw.githubusercontent.com/takubii/worktree-manager/main/scripts/install.ps1 -UseBasicParsing | iex
 wtm --help
 ```
@@ -53,11 +53,11 @@ Repository smoke checks:
 
 ```bat
 wtm list
-wtm path
+wtm path --branch main
 ```
 ```sh
 wtm list
-wtm path
+wtm path --branch main
 ```
 
 ## Manual CD Run (`workflow_dispatch`)

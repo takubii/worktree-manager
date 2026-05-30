@@ -15,7 +15,7 @@ It focuses on worktree lifecycle operations:
 
 Latest release:
 
-- https://github.com/takubii/worktree-manager/releases
+- [v0.5.0](https://github.com/takubii/worktree-manager/releases/tag/v0.5.0)
 
 Linux/macOS:
 
@@ -212,6 +212,16 @@ Print the current version.
 wtm version
 wtm --version
 ```
+
+## Migration From `git-worktree-opener`
+
+`v0.5.0` is the first release under the `worktree-manager` name.
+
+- Replace `wto` with `wtm`.
+- Replace `wto new` with `wtm create`.
+- Replace `wto rm` with `wtm remove`.
+- Replace editor or terminal launch workflows with `wtm path`, then pass the printed path to your shell/editor tooling.
+- Recreate config with `wtm config init`; old `open` and `tmux` config fields are no longer supported.
 
 ## Troubleshooting
 
