@@ -69,7 +69,7 @@ jobs:
         run: go test ./...
 
       - name: Build binary
-        run: go build ./cmd/wto
+        run: go build ./cmd/wtm
 
   required:
     name: CI Required

@@ -2,20 +2,20 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $repoOwner = "takubii"
-$repoName = "git-worktree-opener"
-$binaryName = "wto.exe"
+$repoName = "worktree-manager"
+$binaryName = "wtm.exe"
 
-$version = $env:WTO_VERSION
+$version = $env:WTM_VERSION
 if ([string]::IsNullOrWhiteSpace($version)) {
   $version = ""
 }
 
-$installDir = $env:WTO_INSTALL_DIR
+$installDir = $env:WTM_INSTALL_DIR
 if ([string]::IsNullOrWhiteSpace($installDir)) {
   $installDir = Join-Path $HOME "bin"
 }
 
-$skipChecksum = ($env:WTO_SKIP_CHECKSUM -eq "1")
+$skipChecksum = ($env:WTM_SKIP_CHECKSUM -eq "1")
 
 function Resolve-Release {
   param(
@@ -134,7 +134,7 @@ if ([string]::IsNullOrWhiteSpace($version)) {
   throw "Release metadata does not include tag_name."
 }
 
-$archivePattern = "^git-worktree-opener_.+_windows_${arch}\.zip$"
+$archivePattern = "^worktree-manager_.+_windows_${arch}\.zip$"
 $archiveAsset = $release.assets | Where-Object { $_.name -match $archivePattern } | Select-Object -First 1
 if ($null -eq $archiveAsset) {
   throw "No Windows archive asset found for architecture '$arch'."
@@ -155,7 +155,7 @@ if ([string]::IsNullOrWhiteSpace($checksumsUrl)) {
   throw "Checksums download URL is missing in release metadata."
 }
 
-$tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("wto-install-" + [Guid]::NewGuid().ToString("N"))
+$tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("wtm-install-" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $tempDir | Out-Null
 
 try {
@@ -199,13 +199,13 @@ try {
     Write-Host "Added $installDir to User PATH."
   }
 
-  $wtoCommand = Get-Command "wto" -ErrorAction SilentlyContinue
-  if ($null -ne $wtoCommand) {
-    Write-Host "wto is ready in this terminal."
+  $wtmCommand = Get-Command "wtm" -ErrorAction SilentlyContinue
+  if ($null -ne $wtmCommand) {
+    Write-Host "wtm is ready in this terminal."
   } else {
-    Write-Host "wto command is not available yet in this terminal."
-    Write-Host "Run directly once: $installDir\\wto.exe --help"
-    Write-Host "If needed, open a new terminal and run: wto --help"
+    Write-Host "wtm command is not available yet in this terminal."
+    Write-Host "Run directly once: $installDir\\wtm.exe --help"
+    Write-Host "If needed, open a new terminal and run: wtm --help"
   }
 } finally {
   Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue

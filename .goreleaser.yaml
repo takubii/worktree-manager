@@ -1,16 +1,16 @@
 version: 2
 
-project_name: git-worktree-opener
+project_name: worktree-manager
 dist: dist
 
 builds:
-  - id: wto
-    main: ./cmd/wto
-    binary: wto
+  - id: wtm
+    main: ./cmd/wtm
+    binary: wtm
     env:
       - CGO_ENABLED=0
     ldflags:
-      - -s -w -X github.com/takubii/git-worktree-opener/internal/buildinfo.Version={{ if .Tag }}{{ .Tag }}{{ else }}{{ .Version }}{{ end }}
+      - -s -w -X github.com/takubii/worktree-manager/internal/buildinfo.Version={{ if .Tag }}{{ .Tag }}{{ else }}{{ .Version }}{{ end }}
     goos:
       - linux
       - darwin
@@ -22,14 +22,14 @@ builds:
 archives:
   - id: default
     ids:
-      - wto
+      - wtm
     formats:
       - tar.gz
     format_overrides:
       - goos: windows
         formats:
           - zip
-    name_template: "git-worktree-opener_{{ if .Tag }}{{ .Tag }}{{ else }}{{ .Version }}{{ end }}_{{ .Os }}_{{ .Arch }}"
+    name_template: "worktree-manager_{{ if .Tag }}{{ .Tag }}{{ else }}{{ .Version }}{{ end }}_{{ .Os }}_{{ .Arch }}"
 
 checksum:
   name_template: checksums.txt

@@ -2,16 +2,16 @@
 set -eu
 
 REPO_OWNER="takubii"
-REPO_NAME="git-worktree-opener"
-BINARY_NAME="wto"
+REPO_NAME="worktree-manager"
+BINARY_NAME="wtm"
 
-VERSION="${WTO_VERSION:-}"
-INSTALL_DIR="${WTO_INSTALL_DIR:-${HOME}/.local/bin}"
-SKIP_CHECKSUM="${WTO_SKIP_CHECKSUM:-0}"
+VERSION="${WTM_VERSION:-}"
+INSTALL_DIR="${WTM_INSTALL_DIR:-${HOME}/.local/bin}"
+SKIP_CHECKSUM="${WTM_SKIP_CHECKSUM:-0}"
 
 usage() {
   cat <<'EOF'
-Install wto from GitHub Releases.
+Install wtm from GitHub Releases.
 
 Options:
   --version <tag>      Install a specific tag (for example: v0.1.0)
@@ -108,7 +108,7 @@ select_asset_urls() {
 
   echo "$urls" | while IFS= read -r url; do
     case "$url" in
-      */git-worktree-opener_*_"${os}_${arch}.tar.gz")
+      */worktree-manager_*_"${os}_${arch}.tar.gz")
         echo "archive=$url"
         ;;
       */checksums.txt)
@@ -166,7 +166,7 @@ detect_arch() {
   esac
 }
 
-tmp_dir="$(mktemp -d 2>/dev/null || mktemp -d -t wto-install)"
+tmp_dir="$(mktemp -d 2>/dev/null || mktemp -d -t wtm-install)"
 cleanup() {
   rm -rf "$tmp_dir"
 }
