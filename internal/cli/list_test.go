@@ -33,6 +33,7 @@ type fakeGitClient struct {
 	checkBranchErr    error
 	worktreeAddCalls  []git.WorktreeAddParams
 	worktreeAddErr    error
+	onWorktreeAdd     func(git.WorktreeAddParams) error
 	worktreePruneErr  error
 	worktreePruneCall int
 	worktreeRemove    []fakeWorktreeRemoveCall
@@ -108,7 +109,15 @@ func (f *fakeGitClient) RemoteBranches(_ context.Context, remote string) ([]stri
 func (f *fakeGitClient) WorktreeAdd(_ context.Context, params git.WorktreeAddParams) error {
 	f.worktreeAddCalls = append(f.worktreeAddCalls, params)
 	f.callLog = append(f.callLog, "WorktreeAdd")
-	return f.worktreeAddErr
+	if f.worktreeAddErr != nil {
+		return f.worktreeAddErr
+	}
+	if f.onWorktreeAdd != nil {
+		if err := f.onWorktreeAdd(params); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (f *fakeGitClient) WorktreePrune(_ context.Context) error {

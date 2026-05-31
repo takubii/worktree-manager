@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,6 +28,8 @@ func newCreateCmd(deps Dependencies) *cobra.Command {
 	var baseBranch string
 	var noFetch bool
 	var noPrune bool
+	var noBootstrap bool
+	var dryRun bool
 	var outputRaw string
 
 	cmd := &cobra.Command{
@@ -49,7 +52,9 @@ func newCreateCmd(deps Dependencies) *cobra.Command {
 				resolvedNoFetch = !cfg.Create.Fetch
 			}
 
-			if !resolvedNoPrune {
+			if dryRun {
+				tracef(cmd.Context(), "create: dry-run mode skips git worktree prune")
+			} else if !resolvedNoPrune {
 				tracef(cmd.Context(), "create: running `git worktree prune --expire now`")
 				if err := deps.Git.WorktreePrune(cmd.Context()); err != nil {
 					return err
@@ -78,7 +83,9 @@ func newCreateCmd(deps Dependencies) *cobra.Command {
 				targetBranch = args[0]
 			}
 
-			if !resolvedNoFetch {
+			if dryRun {
+				tracef(cmd.Context(), "create: dry-run mode skips git fetch")
+			} else if !resolvedNoFetch {
 				tracef(cmd.Context(), "create: running `git fetch %s --prune`", remoteName)
 				if err := deps.Git.FetchPrune(cmd.Context(), remoteName); err != nil {
 					return err
@@ -124,6 +131,29 @@ func newCreateCmd(deps Dependencies) *cobra.Command {
 				return err
 			}
 
+			bootstrapCtx := createBootstrapContext{
+				repoRoot:     repoRoot,
+				worktreePath: worktreePath,
+				branch:       resolvedBranch,
+				dryRun:       dryRun,
+			}
+			bootstrapEnabled := hasBootstrapActions(cfg.Create.Bootstrap) && !noBootstrap
+
+			if dryRun {
+				return writeCreateDryRunPlan(
+					cmd.OutOrStdout(),
+					resolvedNoPrune,
+					resolvedNoFetch,
+					remoteName,
+					resolvedBranch,
+					startPoint,
+					worktreePath,
+					cfg.Create.Bootstrap,
+					bootstrapEnabled,
+					bootstrapCtx,
+				)
+			}
+
 			if err := os.MkdirAll(filepath.Dir(worktreePath), 0o755); err != nil {
 				return fmt.Errorf("failed to create worktree parent directory: %w", err)
 			}
@@ -137,6 +167,22 @@ func newCreateCmd(deps Dependencies) *cobra.Command {
 			}
 			tracef(cmd.Context(), "create: worktree added path=%s", worktreePath)
 
+			if bootstrapEnabled {
+				tracef(cmd.Context(), "create: running bootstrap actions")
+				if err := runCreateBootstrap(
+					cmd.Context(),
+					cfg.Create.Bootstrap,
+					bootstrapCtx,
+					deps.CommandRunner,
+					cmd.OutOrStdout(),
+					cmd.ErrOrStderr(),
+				); err != nil {
+					return err
+				}
+			} else if noBootstrap && hasBootstrapActions(cfg.Create.Bootstrap) {
+				tracef(cmd.Context(), "create: bootstrap skipped by --no-bootstrap")
+			}
+
 			return writeCommandOutput(cmd.OutOrStdout(), outputMode, commandOutput{
 				Command: "create",
 				Path:    worktreePath,
@@ -149,9 +195,87 @@ func newCreateCmd(deps Dependencies) *cobra.Command {
 	cmd.Flags().StringVar(&baseBranch, "base", defaultBaseBranch, "base branch used when creating a new branch")
 	cmd.Flags().BoolVar(&noFetch, "no-fetch", false, "skip running git fetch <remote> --prune before branch resolution")
 	cmd.Flags().BoolVar(&noPrune, "no-prune", false, "skip running git worktree prune --expire now before processing")
+	cmd.Flags().BoolVar(&noBootstrap, "no-bootstrap", false, "skip configured create.bootstrap copy and post-create actions")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print planned create and bootstrap actions without changing files or running commands")
 	cmd.Flags().StringVar(&outputRaw, "output", string(outputModeNone), "output mode: "+supportedOutputModesText)
 
 	return cmd
+}
+
+func writeCreateDryRunPlan(
+	w io.Writer,
+	noPrune bool,
+	noFetch bool,
+	remoteName string,
+	branch string,
+	startPoint string,
+	worktreePath string,
+	bootstrap config.Bootstrap,
+	bootstrapEnabled bool,
+	bootstrapCtx createBootstrapContext,
+) error {
+	if _, err := fmt.Fprintln(w, "dry-run: planned create actions (no changes made)"); err != nil {
+		return fmt.Errorf("failed to write dry-run output: %w", err)
+	}
+	if !noPrune {
+		if _, err := fmt.Fprintln(w, "- git worktree prune --expire now"); err != nil {
+			return fmt.Errorf("failed to write dry-run output: %w", err)
+		}
+	}
+	if !noFetch {
+		if _, err := fmt.Fprintf(w, "- git fetch %s --prune\n", remoteName); err != nil {
+			return fmt.Errorf("failed to write dry-run output: %w", err)
+		}
+	}
+	addCommand := "git worktree add"
+	if strings.TrimSpace(startPoint) != "" {
+		addCommand += fmt.Sprintf(" -b %s %q %s", branch, worktreePath, startPoint)
+	} else {
+		addCommand += fmt.Sprintf(" %q %s", worktreePath, branch)
+	}
+	if _, err := fmt.Fprintf(w, "- %s\n", addCommand); err != nil {
+		return fmt.Errorf("failed to write dry-run output: %w", err)
+	}
+	if !hasBootstrapActions(bootstrap) {
+		return nil
+	}
+	if !bootstrapEnabled {
+		if _, err := fmt.Fprintln(w, "- skip configured bootstrap actions (--no-bootstrap)"); err != nil {
+			return fmt.Errorf("failed to write dry-run output: %w", err)
+		}
+		return nil
+	}
+	for _, action := range bootstrap.CopyFiles {
+		source, err := resolveBootstrapSourcePath(action.From, bootstrapCtx)
+		if err != nil {
+			return err
+		}
+		destination, err := resolveWorktreeContainedPath(action.To, bootstrapCtx)
+		if err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "- copy %q -> %q\n", source, destination); err != nil {
+			return fmt.Errorf("failed to write dry-run output: %w", err)
+		}
+	}
+	for _, action := range bootstrap.PostCreate {
+		command, err := renderCommandArgs(action.Command, bootstrapCtx)
+		if err != nil {
+			return err
+		}
+		cwd, err := resolveHookCWD(action.CWD, bootstrapCtx)
+		if err != nil {
+			return err
+		}
+		label := strings.TrimSpace(action.Name)
+		if label == "" {
+			label = strings.Join(command, " ")
+		}
+		if _, err := fmt.Fprintf(w, "- run hook %q in %q: %s\n", label, cwd, strings.Join(command, " ")); err != nil {
+			return fmt.Errorf("failed to write dry-run output: %w", err)
+		}
+	}
+	return nil
 }
 
 func resolveTargetBranch(

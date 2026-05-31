@@ -16,15 +16,16 @@ import (
 
 // Dependencies holds external dependencies for command execution.
 type Dependencies struct {
-	Stdout   io.Writer
-	Stderr   io.Writer
-	Version  string
-	LookPath func(file string) (string, error)
-	Git      git.Client
-	Selector selector.Selector
-	Config   config.Provider
-	Updater  updater.Service
-	Doctor   doctor.Service
+	Stdout        io.Writer
+	Stderr        io.Writer
+	Version       string
+	LookPath      func(file string) (string, error)
+	Git           git.Client
+	Selector      selector.Selector
+	Config        config.Provider
+	Updater       updater.Service
+	Doctor        doctor.Service
+	CommandRunner commandRunner
 }
 
 // NewRootCmd creates the root command for wtm.
@@ -96,6 +97,9 @@ func withDefaults(deps Dependencies) Dependencies {
 			LookPath: deps.LookPath,
 			Git:      deps.Git,
 		})
+	}
+	if deps.CommandRunner == nil {
+		deps.CommandRunner = defaultCommandRunner{}
 	}
 	return deps
 }

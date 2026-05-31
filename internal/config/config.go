@@ -13,8 +13,30 @@ type Config struct {
 
 // Create stores defaults for `wtm create`.
 type Create struct {
-	Fetch bool `json:"fetch"`
-	Prune bool `json:"prune"`
+	Fetch     bool      `json:"fetch"`
+	Prune     bool      `json:"prune"`
+	Bootstrap Bootstrap `json:"bootstrap,omitempty"`
+}
+
+// Bootstrap stores optional post-create bootstrap actions.
+type Bootstrap struct {
+	CopyFiles  []CopyFileAction `json:"copyFiles,omitempty"`
+	PostCreate []HookAction     `json:"postCreate,omitempty"`
+}
+
+// CopyFileAction copies one local file into a new worktree.
+type CopyFileAction struct {
+	From      string `json:"from"`
+	To        string `json:"to"`
+	Overwrite bool   `json:"overwrite"`
+	Required  bool   `json:"required"`
+}
+
+// HookAction runs one command after a worktree is created.
+type HookAction struct {
+	Name    string   `json:"name,omitempty"`
+	Command []string `json:"command"`
+	CWD     string   `json:"cwd,omitempty"`
 }
 
 // Remove stores removal defaults.

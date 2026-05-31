@@ -73,6 +73,8 @@ Create a worktree for a local, remote, or new branch.
 wtm create
 wtm create feature/my-task
 wtm create feature/my-task --base main
+wtm create feature/my-task --dry-run
+wtm create feature/my-task --no-bootstrap
 wtm create feature/my-task --output path
 wtm create feature/my-task --output json
 ```
@@ -83,12 +85,16 @@ Behavior:
 - Runs `git fetch origin --prune` unless disabled.
 - Creates worktrees under `<repo-parent>/worktrees/<branch>` by default.
 - Uses `main` as the default base branch for new branches.
+- Runs configured `create.bootstrap` file copy and post-create hooks after the worktree is created.
+- `--dry-run` prints planned create/bootstrap actions without pruning, fetching, creating a worktree, copying files, or running hooks.
 
 Flags:
 
 - `--base <branch>`
+- `--dry-run`
 - `--no-fetch`
 - `--no-prune`
+- `--no-bootstrap`
 - `--output none|path|json`
 
 ### `wtm path`
@@ -168,7 +174,28 @@ Example:
   "worktreeDirTemplate": "{repoParent}/worktrees/{branch}",
   "create": {
     "fetch": true,
-    "prune": true
+    "prune": true,
+    "bootstrap": {
+      "copyFiles": [
+        {
+          "from": ".env",
+          "to": ".env",
+          "overwrite": false,
+          "required": false
+        }
+      ],
+      "postCreate": [
+        {
+          "name": "install dependencies",
+          "command": ["npm", "install"]
+        },
+        {
+          "name": "build frontend",
+          "command": ["npm", "run", "build"],
+          "cwd": "frontend"
+        }
+      ]
+    }
   },
   "remove": {
     "deleteBranch": "safe"
@@ -181,6 +208,31 @@ Example:
 - `{repoParent}`
 - `{repoRoot}`
 - `{branch}`
+
+`create.bootstrap` is optional. When it is omitted, `wtm create` does not copy files or run post-create hooks. Use `wtm create --no-bootstrap` to skip configured bootstrap actions for one run.
+
+Bootstrap file copy:
+
+- `from` is an absolute path or a path relative to `{repoRoot}`.
+- `to` is relative to the new `{worktree}` and must stay inside it.
+- Only files are supported in this release; directories, glob patterns, and templates are not expanded.
+- Existing destination files are skipped unless `overwrite` is `true`.
+- Missing files warn and continue unless `required` is `true`.
+
+Post-create hooks:
+
+- `command` is an argv array and is executed without a shell.
+- Hooks run in order after successful worktree creation and file copy.
+- `cwd` defaults to `{worktree}`. Relative `cwd` values are resolved inside the new worktree.
+- Hook execution stops at the first failure and returns a non-zero exit code.
+
+Bootstrap placeholders:
+
+- `{repoRoot}`
+- `{worktree}`
+- `{branch}`
+
+Docker Compose setup can be modeled later with bootstrap templates and post-create hooks, but `wtm` does not provide Docker-specific commands.
 
 ### `wtm doctor`
 

@@ -17,8 +17,27 @@ type rawConfig struct {
 }
 
 type rawCreate struct {
-	Fetch *bool `json:"fetch"`
-	Prune *bool `json:"prune"`
+	Fetch     *bool         `json:"fetch"`
+	Prune     *bool         `json:"prune"`
+	Bootstrap *rawBootstrap `json:"bootstrap"`
+}
+
+type rawBootstrap struct {
+	CopyFiles  []rawCopyFileAction `json:"copyFiles"`
+	PostCreate []rawHookAction     `json:"postCreate"`
+}
+
+type rawCopyFileAction struct {
+	From      *string `json:"from"`
+	To        *string `json:"to"`
+	Overwrite *bool   `json:"overwrite"`
+	Required  *bool   `json:"required"`
+}
+
+type rawHookAction struct {
+	Name    *string  `json:"name"`
+	Command []string `json:"command"`
+	CWD     *string  `json:"cwd"`
 }
 
 type rawRemove struct {
