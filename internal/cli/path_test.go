@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -83,9 +84,11 @@ func TestPathCommand_FiltersUnavailableWorktrees(t *testing.T) {
 	t.Parallel()
 
 	var stderr bytes.Buffer
+	missingPath := filepath.Join(t.TempDir(), "missing")
 	gitClient := &fakeGitClient{
 		output: "worktree C:/worktrees/stale\nHEAD abc\nbranch refs/heads/old\nprunable gitdir file points to non-existent location\n\n",
 	}
+	gitClient.output += "worktree " + strings.ReplaceAll(missingPath, "\\", "/") + "\nHEAD def\nbranch refs/heads/missing\n\n"
 	cmd := NewRootCmd(Dependencies{
 		Stdout: &bytes.Buffer{},
 		Stderr: &stderr,
@@ -100,7 +103,22 @@ func TestPathCommand_FiltersUnavailableWorktrees(t *testing.T) {
 	if !strings.Contains(err.Error(), "no valid worktrees found") {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	if !strings.Contains(err.Error(), "1 stale and 1 missing") {
+		t.Fatalf("expected unavailable counts in error, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "wtm remove <branch>") {
+		t.Fatalf("expected cleanup guidance in error, got: %v", err)
+	}
 	if !strings.Contains(stderr.String(), "skipped 1 stale worktree") {
 		t.Fatalf("expected stale warning, got: %s", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "skipped 1 missing worktree") {
+		t.Fatalf("expected missing warning, got: %s", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "wtm remove <branch>") {
+		t.Fatalf("expected cleanup guidance, got: %s", stderr.String())
+	}
+	if gitClient.worktreePruneCall != 0 {
+		t.Fatalf("path must not prune metadata, got %d prune calls", gitClient.worktreePruneCall)
 	}
 }

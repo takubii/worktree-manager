@@ -1,15 +1,12 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/takubii/worktree-manager/internal/git"
 )
-
-const errNoValidWorktreesForPath = "no valid worktrees found after filtering stale/missing entries. Run `wtm list` to inspect current state, then retry"
 
 func newPathCmd(deps Dependencies) *cobra.Command {
 	var targetBranch string
@@ -45,7 +42,7 @@ func newPathCmd(deps Dependencies) *cobra.Command {
 			warnSkippedPrunableWorktrees(cmd.ErrOrStderr(), "wtm path", prunable)
 			warnSkippedMissingWorktrees(cmd.ErrOrStderr(), "wtm path", missing)
 			if len(activeWorktrees) == 0 {
-				return errors.New(errNoValidWorktreesForPath)
+				return noValidWorktreesForPathError(prunable, missing)
 			}
 
 			selected, err := selectWorktreeForPath(cmd, deps, activeWorktrees, targetBranch)

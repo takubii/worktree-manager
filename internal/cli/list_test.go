@@ -198,6 +198,54 @@ func TestListCommand_DefaultFormatRendersTable(t *testing.T) {
 	}
 }
 
+func TestListCommand_TableFormatWarnsAboutUnavailableWorktrees(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	activePath := t.TempDir()
+	missingPath := filepath.Join(t.TempDir(), "missing")
+	stalePath := filepath.Join(t.TempDir(), "stale")
+	gitClient := &fakeGitClient{
+		output: "worktree " + strings.ReplaceAll(activePath, "\\", "/") + "\n" +
+			"HEAD 1111111111111111111111111111111111111111\n" +
+			"branch refs/heads/main\n\n" +
+			"worktree " + strings.ReplaceAll(missingPath, "\\", "/") + "\n" +
+			"HEAD 2222222222222222222222222222222222222222\n" +
+			"branch refs/heads/feature/missing\n\n" +
+			"worktree " + strings.ReplaceAll(stalePath, "\\", "/") + "\n" +
+			"HEAD 3333333333333333333333333333333333333333\n" +
+			"branch refs/heads/feature/stale\n" +
+			"prunable gitdir file points to non-existent location\n\n",
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout: &stdout,
+		Stderr: &stderr,
+		Git:    gitClient,
+	})
+	cmd.SetArgs([]string{"list", "--format", "table"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), config.ListStatusMissing) {
+		t.Fatalf("expected missing status in table output, got: %s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), config.ListStatusStale) {
+		t.Fatalf("expected stale status in table output, got: %s", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "found 1 stale worktree") {
+		t.Fatalf("expected stale warning, got: %s", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "found 1 missing worktree") {
+		t.Fatalf("expected missing warning, got: %s", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "wtm remove <branch>") {
+		t.Fatalf("expected actionable remove guidance, got: %s", stderr.String())
+	}
+}
+
 func TestListCommand_RawFormatWritesGitOutput(t *testing.T) {
 	t.Parallel()
 
@@ -220,6 +268,34 @@ func TestListCommand_RawFormatWritesGitOutput(t *testing.T) {
 
 	if stdout.String() != gitClient.output {
 		t.Fatalf("unexpected stdout:\nwant:\n%s\ngot:\n%s", gitClient.output, stdout.String())
+	}
+}
+
+func TestListCommand_RawFormatDoesNotWarnAboutUnavailableWorktrees(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	gitClient := &fakeGitClient{
+		output: "worktree C:/worktrees/stale\nHEAD abcdef\nbranch refs/heads/feature/stale\nprunable gitdir file points to non-existent location\n\n",
+	}
+
+	cmd := NewRootCmd(Dependencies{
+		Stdout: &stdout,
+		Stderr: &stderr,
+		Git:    gitClient,
+	})
+	cmd.SetArgs([]string{"list", "--format", "raw"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if stdout.String() != gitClient.output {
+		t.Fatalf("unexpected stdout:\nwant:\n%s\ngot:\n%s", gitClient.output, stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("raw format should not write guidance to stderr, got: %s", stderr.String())
 	}
 }
 
@@ -299,6 +375,12 @@ func TestListCommand_JSONFormatWritesRows(t *testing.T) {
 	}
 	if !staleRow.Prunable {
 		t.Fatalf("expected stale row prunable=true")
+	}
+	if !strings.Contains(stderr.String(), "found 1 stale worktree") {
+		t.Fatalf("expected stale warning, got: %s", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "found 1 missing worktree") {
+		t.Fatalf("expected missing warning, got: %s", stderr.String())
 	}
 }
 

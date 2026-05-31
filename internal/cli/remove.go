@@ -164,18 +164,15 @@ func selectWorktreeForRemove(ctx context.Context, deps Dependencies, args []stri
 }
 
 func formatWorktreeOptionForRemove(wt git.Worktree) string {
-	status := config.ListStatusActive
-	if wt.Prunable {
-		status = config.ListStatusStale
-	}
-
-	return fmt.Sprintf("%s\t[%s]", formatWorktreeOption(wt), status)
+	return fmt.Sprintf("%s\t[%s]", formatWorktreeOption(wt), resolveListStatus(wt))
 }
 
 func writeRmDryRunPlan(stdout io.Writer, selected git.Worktree, removeForce bool, deleteMode deleteBranchMode) error {
 	commands := make([]string, 0, 3)
+	notes := make([]string, 0, 1)
 	if selected.Prunable {
 		commands = append(commands, "git worktree prune --expire now")
+		notes = append(notes, "selected worktree is stale (`prunable`); running without --dry-run prunes stale Git worktree metadata explicitly")
 	} else {
 		command := "git worktree remove"
 		if removeForce {
@@ -183,6 +180,9 @@ func writeRmDryRunPlan(stdout io.Writer, selected git.Worktree, removeForce bool
 		}
 		command += fmt.Sprintf(" %q", selected.Path)
 		commands = append(commands, command)
+		if resolveListStatus(selected) == config.ListStatusMissing {
+			notes = append(notes, "selected worktree path is missing locally; running without --dry-run asks Git to remove the registered worktree entry")
+		}
 	}
 
 	branch, hasBranch := worktreeLocalBranch(selected)
@@ -204,6 +204,11 @@ func writeRmDryRunPlan(stdout io.Writer, selected git.Worktree, removeForce bool
 	}
 	for _, command := range commands {
 		if _, err := fmt.Fprintf(stdout, "- %s\n", command); err != nil {
+			return fmt.Errorf("failed to write dry-run output: %w", err)
+		}
+	}
+	for _, note := range notes {
+		if _, err := fmt.Fprintf(stdout, "note: %s\n", note); err != nil {
 			return fmt.Errorf("failed to write dry-run output: %w", err)
 		}
 	}

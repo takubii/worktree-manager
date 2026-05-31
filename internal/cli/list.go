@@ -46,6 +46,8 @@ func newListCmd(deps Dependencies) *cobra.Command {
 				return fmt.Errorf("failed to parse git worktree output: %w", err)
 			}
 			tracef(cmd.Context(), "list: parsed %d worktrees", len(worktrees))
+			unavailable := classifyUnavailableWorktrees(worktrees)
+			warnUnavailableWorktreesForList(cmd.ErrOrStderr(), unavailable)
 
 			cwd, err := os.Getwd()
 			if err != nil {

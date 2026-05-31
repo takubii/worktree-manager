@@ -59,3 +59,35 @@ func TestRemoveCommand_DryRunUsesNewCommandName(t *testing.T) {
 		t.Fatalf("WorktreeRemove should not be called in dry-run, got %+v", gitClient.worktreeRemove)
 	}
 }
+
+func TestRemoveCommand_DryRunExplainsStalePrunePlan(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	gitClient := &fakeGitClient{
+		output: "worktree C:/worktrees/stale\nHEAD def\nbranch refs/heads/feature/stale\nprunable gitdir file points to non-existent location\n\n",
+	}
+	cmd := NewRootCmd(Dependencies{
+		Stdout: &stdout,
+		Stderr: &bytes.Buffer{},
+		Git:    gitClient,
+		Config: config.NewStaticProvider(config.DefaultConfig()),
+	})
+	cmd.SetArgs([]string{"remove", "feature/stale", "--dry-run"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "git worktree prune --expire now") {
+		t.Fatalf("expected planned prune command, got: %s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "selected worktree is stale") {
+		t.Fatalf("expected stale guidance note, got: %s", stdout.String())
+	}
+	if gitClient.worktreePruneCall != 0 {
+		t.Fatalf("WorktreePrune should not be called in dry-run, got %d", gitClient.worktreePruneCall)
+	}
+	if len(gitClient.worktreeRemove) != 0 {
+		t.Fatalf("WorktreeRemove should not be called in dry-run, got %+v", gitClient.worktreeRemove)
+	}
+}

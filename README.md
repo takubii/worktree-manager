@@ -63,6 +63,8 @@ Flags:
 
 - `--format table|raw|json`
 
+When `wtm list` sees stale (`prunable`) or missing-path entries, table and JSON formats keep stdout unchanged and print guidance to stderr. Raw format stays identical to `git worktree list --porcelain`.
+
 ### `wtm create`
 
 Create a worktree for a local, remote, or new branch.
@@ -231,7 +233,7 @@ Run `wtm` inside a Git repository or linked worktree.
 
 ### `wtm path` finds no valid worktrees
 
-Run `wtm list` to inspect stale or missing entries. Use `wtm remove` to clean stale entries when appropriate.
+Run `wtm list` to inspect stale or missing entries. Use `wtm remove <branch>` or interactive `wtm remove` to clean stale metadata or remove registered worktree entries when appropriate.
 
 ### `wtm remove` refuses to remove
 
